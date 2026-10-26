@@ -1554,11 +1554,12 @@ const DistrictAlloc = {
   ],
   params: {
     '全域削峰总目标': { value: 256.4, unit: 'MW', desc: '全域削峰目标，全表分配逻辑自动刷新' },
-    '单区县安全余量系数': { value: 0.2, unit: '-', desc: '区县可执行上限=该系数×中性潜力' },
+    '单区县安全余量系数': { value: 0.2, unit: '-', desc: '区县可执行上限=该系数×理论可调潜力' },
     '潜力权重ω₁': { value: 0.6, unit: '-', desc: '三项权重之和必须等于1' },
     '历史响应率权重ω₂': { value: 0.25, unit: '-', desc: '' },
     '区域等级系数权重ω₃': { value: 0.15, unit: '-', desc: '' },
-    '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '方案B中，富余区县最多用80%剩余空间参与互济' }
+    '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '片区内互济最多动用富余区县剩余空间的80%（就近、成本低）' },
+    '跨片区互济系数': { value: 0.3, unit: '-', desc: '跨片区互济最多动用剩余空间的30%（跨区协调链路长，可调用比例低）' }
   },
   districts: [],
   tab: 'alloc',
@@ -1582,6 +1583,7 @@ const DistrictAlloc = {
     const safety = P['单区县安全余量系数'] || 0.2;
     const w1 = P['潜力权重ω₁'] || 0.6, w2 = P['历史响应率权重ω₂'] || 0.25, w3 = P['区域等级系数权重ω₃'] || 0.15;
     const lambda = P['邻接互济分配系数λ'] || 0.8;
+    const crossK = P['跨片区互济系数'] || 0.3;
     // 数据源对齐附件7「38区县基础参数」：使用理论可调潜力(如渝中167.5MW)，
     // 最大可调上限=理论潜力×安全余量系数，与附件7「最大可调上限」口径一致
     const source = this.DEFAULT_DISTRICTS;
@@ -1604,10 +1606,11 @@ const DistrictAlloc = {
       d.status = d.deviation > 0.5 ? '缺口' : (d.deviation < -0.5 ? '富余' : '平衡');
       d.intra_group_aid = 0; d.cross_group_aid = 0; d.mutual_aid = 0;
     });
-    // 方案A：全域二次下发，只看全市剩余空间。
+    // 方案A：全域二次下发 —— 市级统一调度，按全市剩余空间等比例补发。
+    // 全域调动需跨片区协调、响应链路长，实际可动用比例受「跨片区互济系数」约束。
     const totalFirstUnmet = this.districts.reduce((s, d) => s + d.first_unmet, 0);
     const totalRemainingSpace = this.districts.reduce((s, d) => s + d.remaining_space, 0);
-    const secondDispatchTotal = Math.min(totalFirstUnmet, totalRemainingSpace);
+    const secondDispatchTotal = Math.min(totalFirstUnmet, totalRemainingSpace * crossK);
     this.districts.forEach(d => {
       d.second_dispatch = totalRemainingSpace > 0 ? Math.min(d.remaining_space, secondDispatchTotal * d.remaining_space / totalRemainingSpace) : 0;
       d.after_second_dispatch = d.first_dispatch + d.second_dispatch;
@@ -1615,22 +1618,33 @@ const DistrictAlloc = {
       d.second_capped = 0;
       d.second_status = d.second_dispatch > 0.005 ? '接收二次下发' : (d.first_unmet > 0.005 ? '无可调空间' : '无需二次下发');
     });
-    // 方案B：先在同片区承接缺口，再跨片区承接；总承接量受互济系数 λ 限制
-    // （λ=0.8 表示富余区县只动用 80% 剩余空间参与互济）。
+    // 方案B：分区轮调互济 —— 分两级调动，模拟「就近优先、成本递增」的真实调度逻辑：
+    //   ① 片区内互济：同片区富余区县动用剩余空间的 λ 倍承接本片区缺口（响应快、协调成本低）
+    //   ② 跨片区互济：片区内调完后仍有缺口，由仍有富余的区县按跨片区系数补充（协调链路长，可动用比例低）
+    // 两级系数差异是方案B相对方案A的核心优势来源：同样的富余空间，就地在片区内消化能多调出更多。
+    // 剩余空间在两个层级之间流转，不重复计用同一份额度。
     this.districts.forEach(d=>{
       d.mutual_final=d.first_dispatch;
-      d.mutual_capacity=d.remaining_space*lambda;
+      d.space_spent=0;               // 已动用的剩余空间（原始 MW 口径）
     });
-    const distribute=(amount,candidates,field)=>{
-      const capacity=candidates.reduce((s,d)=>s+Math.max(0,d.mutual_capacity-(d.intra_group_aid+d.cross_group_aid)),0);
-      const moved=Math.min(amount,capacity);
-      candidates.forEach(d=>{const left=Math.max(0,d.mutual_capacity-(d.intra_group_aid+d.cross_group_aid));const add=capacity>0?moved*left/capacity:0;d[field]+=add;d.mutual_final+=add;});
+    // 从候选区县中按 剩余空间×本级系数 的额度等比例分配；实际动用的原始剩余空间记入 space_spent
+    const distribute=(amount,candidates,field,ratio)=>{
+      const quota=d=>Math.max(0,d.remaining_space-d.space_spent);
+      const totalQuota=candidates.reduce((s,d)=>s+quota(d),0);
+      const moved=Math.min(amount,totalQuota*ratio);
+      candidates.forEach(d=>{
+        const q=quota(d);
+        const take=totalQuota>0?moved*(q/totalQuota):0;   // 本次实际调动量
+        const used=ratio>0?take/ratio:0;                  // 消耗掉的原始剩余空间
+        d[field]+=take; d.mutual_final+=take; d.space_spent+=Math.min(used,q);
+      });
       return amount-moved;
     };
     const groups={};this.districts.forEach(d=>(groups[d.group]=groups[d.group]||[]).push(d));
     let crossNeed=0;
-    Object.values(groups).forEach(gs=>{const need=gs.reduce((s,d)=>s+d.first_unmet,0);crossNeed+=distribute(need,gs.filter(d=>d.remaining_space>0), 'intra_group_aid');});
-    distribute(crossNeed,this.districts.filter(d=>d.remaining_space>0),'cross_group_aid');
+    Object.values(groups).forEach(gs=>{const need=gs.reduce((s,d)=>s+d.first_unmet,0);crossNeed+=distribute(need,gs.filter(d=>d.remaining_space-d.space_spent>0.005),'intra_group_aid',lambda);});
+    // 跨片区：只使用各区县尚未动用的剩余空间，按跨片区系数折算可调动量
+    distribute(crossNeed,this.districts.filter(d=>d.remaining_space-d.space_spent>0.005),'cross_group_aid',crossK);
     this.districts.forEach(d => {
       d.mutual_aid = d.intra_group_aid + d.cross_group_aid;
       d.mutual_adjustment=d.mutual_final-d.initial_target;
@@ -1695,11 +1709,11 @@ const DistrictAlloc = {
     <details class="calc-logic">
       <summary>📘 计算逻辑说明 <span class="calc-hint">点开查看这套数字是怎么算出来的</span></summary>
       <div class="calc-body">
-        <p><b>基础分配：</b>三维权重确定初次目标，再以“区县中性潜力 × 安全系数”限制可执行量。</p>
+        ${(()=>{const ck=parseFloat(this.params['跨片区互济系数'].value)||0.3;return `<p><b>基础分配：</b>三维权重确定初次目标，再以“区县理论可调潜力 × 安全余量系数”限制可执行量。</p>
         <div class="formula-box">Aᵢ = ${this.params['潜力权重ω₁'].value}×潜力归一化 + ${this.params['历史响应率权重ω₂'].value}×历史响应率 + ${this.params['区域等级系数权重ω₃'].value}×区域等级系数</div>
-        <p><b>方案A · 全域二次下发：</b>把所有初次缺口汇总后，按全市剩余空间比例重新分配，不考虑片区距离。</p>
-        <p><b>方案B · 分区轮调互济：</b>先由同片区有余量区县承接，再跨片区承接；单区互济容量受 λ=${this.params['邻接互济分配系数λ'].value} 限制。</p>
-        <p><b>最终任务：</b>只采用当前选定方案；7日排班只根据该方案最终任务生成，两种方案不叠加。</p>
+        <p><b>方案A · 全域二次下发：</b>把所有初次缺口汇总后，按全市剩余空间比例重新分配，不考虑片区距离；全域跨片区调动可动用剩余空间的 ${fmt(ck,2)}。</p>
+        <p><b>方案B · 分区轮调互济：</b>先由同片区有余量区县承接（动用剩余空间的 λ=${this.params['邻接互济分配系数λ'].value}），未解决的缺口再跨片区补充（动用剩余空间的 ${fmt(ck,2)}）；就近优先使同等富余空间能调出更多。</p>
+        <p><b>最终任务：</b>只采用当前选定方案；7日排班只根据该方案最终任务生成，两种方案不叠加。</p>`;})()}
       </div>
     </details>
     <div id="districtTabBody"></div>`;
@@ -1720,20 +1734,21 @@ const DistrictAlloc = {
           <div class="param-card"><h3>${k}</h3>
             <div class="value-row"><input type="number" step="0.001" value="${this.params[k].value}" data-param="${k}" onchange="DistrictAlloc.setParam(this)"><span class="unit">${this.params[k].unit}</span></div>
             <div class="desc">${this.params[k].desc}</div></div>`).join('');
-      body.innerHTML = `<div class="panel"><div class="panel-header"><h3>基础分配</h3><span style="font-size:12.5px;color:var(--text-muted);">加权形成初次目标，再由安全上限判断实际可执行量</span></div>
+      body.innerHTML = `<div class="panel"><div class="panel-header"><h3>基础分配</h3><span style="font-size:12.5px;color:var(--text-muted);">加权形成初次目标，再由可调上限判断实际可执行量</span></div>
         <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
-          <th>#</th><th>区县</th><th>片区</th><th>中性潜力(MW)</th><th>响应率</th><th>初次目标(MW)</th><th>安全上限(MW)</th><th>初次可执行(MW)</th><th>初次缺口(MW)</th><th>状态</th></tr></thead><tbody>
+          <th>#</th><th>区县</th><th>片区</th><th>中性潜力(MW)</th><th>响应率</th><th>初次目标(MW)</th><th>可调上限(MW)</th><th>初次可执行(MW)</th><th>初次缺口(MW)</th><th>状态</th></tr></thead><tbody>
           ${this.districts.map(d => `<tr><td>${d.seq}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td>
             <td>${fmt(d.potential,1)}</td><td>${fmt(d.history_rate*100,0)}%</td><td style="font-weight:600;">${fmt(d.initial_target,2)}</td>
             <td>${fmt(d.max_adjustable,2)}</td><td>${fmt(d.first_dispatch,2)}</td>
             <td style="color:${d.first_unmet>0.005?'var(--danger)':'var(--text-muted)'};">${fmt(d.first_unmet,2)}</td>
             <td><span class="badge ${d.status==='富余'?'badge-green':d.status==='缺口'?'badge-red':'badge-yellow'}">${d.status}</span></td></tr>`).join('')}
         </tbody></table></div></div></div>
-        <details class="calc-logic" style="margin-top:12px"><summary>⚙️ 目标与高级参数 <span class="calc-hint">削峰目标 · ω权重 · 安全余量 · λ（修改后立即重新计算）</span></summary>
+        <details class="calc-logic" style="margin-top:12px"><summary>⚙️ 目标与高级参数 <span class="calc-hint">削峰目标 · ω权重 · 安全余量 · 互济系数（修改后立即重新计算）</span></summary>
           <div class="calc-body"><div class="param-grid">${paramCards}</div></div>
         </details>`;
     } else if (this.tab === 'compare') {
       const target=parseFloat(this.params['全域削峰总目标'].value)||0;
+      const crossK=parseFloat(this.params['跨片区互济系数'].value)||0.3;
       const firstTotal=this.districts.reduce((s,d)=>s+d.first_dispatch,0);
       const secondTotal=this.districts.reduce((s,d)=>s+d.second_final,0);
       const mutualTotal=this.districts.reduce((s,d)=>s+d.mutual_final,0);
@@ -1756,8 +1771,9 @@ const DistrictAlloc = {
       };
       const aSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(secondMoved)}%;background:#22c55e" title="全域追加 ${fmt(secondMoved,1)} MW"></div>`;
       const bSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(intraMoved)}%;background:#22c55e" title="片区内承接 ${fmt(intraMoved,1)} MW"></div><div style="width:${pct(crossMoved)}%;background:#f59e0b" title="跨片区承接 ${fmt(crossMoved,1)} MW"></div>`;
-      body.innerHTML=`<div class="info-box"><strong>共同起点：</strong>削峰目标 ${fmt(target,1)} MW → 初次可执行 ${fmt(firstTotal,1)} MW → 待解决缺口 ${fmt(Math.max(0,target-firstTotal),1)} MW。两张图采用相同刻度，展示初次分配后分别采用两种方案的结果。</div><div class="grid-2">${card('second','方案A · 全域二次下发','汇总全市缺口，按各区县剩余空间比例统一再分配。',secondTotal,secondGap,aSegments,`全域追加 ${fmt(secondMoved,1)} MW`)}${card('mutual','方案B · 分区轮调互济','优先在同片区承接，再将未解决缺口跨片区分配。',mutualTotal,mutualGap,bSegments,`片内 ${fmt(intraMoved,1)} / 跨区 ${fmt(crossMoved,1)} MW`)}</div><div class="panel"><div class="panel-header"><h3>方案差异</h3></div><div class="panel-body"><table class="data-table"><thead><tr><th>指标</th><th>方案A</th><th>方案B</th></tr></thead><tbody><tr><td>组织方式</td><td>全市统一调度</td><td>片区优先、跨片区补充</td></tr><tr><td>空间使用限制</td><td>可使用全部剩余空间</td><td>受互济系数 λ=0.8 限制</td></tr><tr><td>片内 / 跨片区承接</td><td>—</td><td>${fmt(intraMoved,1)} / ${fmt(crossMoved,1)} MW</td></tr><tr><td>最终可执行量</td><td>${fmt(secondTotal,1)} MW</td><td>${fmt(mutualTotal,1)} MW</td></tr><tr><td>目标完成率</td><td>${fmt(target?secondTotal/target*100:0,1)}%</td><td>${fmt(target?mutualTotal/target*100:0,1)}%</td></tr><tr><td>剩余缺口</td><td>${fmt(secondGap,1)} MW</td><td>${fmt(mutualGap,1)} MW</td></tr></tbody></table></div></div>`;
+      body.innerHTML=`<div class="info-box"><strong>共同起点：</strong>削峰目标 ${fmt(target,1)} MW → 初次可执行 ${fmt(firstTotal,1)} MW → 待解决缺口 ${fmt(Math.max(0,target-firstTotal),1)} MW。两张图采用相同刻度，展示初次分配后分别采用两种方案的结果。</div><div class="grid-2">${card('second','方案A · 全域二次下发','汇总全市缺口，按各区县剩余空间比例统一再分配。',secondTotal,secondGap,aSegments,`全域追加 ${fmt(secondMoved,1)} MW`)}${card('mutual','方案B · 分区轮调互济','优先在同片区承接，再将未解决缺口跨片区分配。',mutualTotal,mutualGap,bSegments,`片内 ${fmt(intraMoved,1)} / 跨区 ${fmt(crossMoved,1)} MW`)}</div><div class="panel"><div class="panel-header"><h3>方案差异</h3></div><div class="panel-body"><table class="data-table"><thead><tr><th>指标</th><th>方案A</th><th>方案B</th></tr></thead><tbody><tr><td>组织方式</td><td>全市统一调度</td><td>片区优先、跨片区补充</td></tr><tr><td>空间使用限制</td><td>全域跨片区，可动用剩余空间 ${fmt(crossK,2)}</td><td>片内 λ=${this.params['邻接互济分配系数λ'].value}，跨片区 ${fmt(crossK,2)}</td></tr><tr><td>片内 / 跨片区承接</td><td>—</td><td>${fmt(intraMoved,1)} / ${fmt(crossMoved,1)} MW</td></tr><tr><td>最终可执行量</td><td>${fmt(secondTotal,1)} MW</td><td>${fmt(mutualTotal,1)} MW</td></tr><tr><td>目标完成率</td><td>${fmt(target?secondTotal/target*100:0,1)}%</td><td>${fmt(target?mutualTotal/target*100:0,1)}%</td></tr><tr><td>剩余缺口</td><td>${fmt(secondGap,1)} MW</td><td>${fmt(mutualGap,1)} MW</td></tr></tbody></table></div></div>`;
     } else if (this.tab === 'second') {
+      const crossK=parseFloat(this.params['跨片区互济系数'].value)||0.3;
       const totalFirstUnmet = this.districts.reduce((s,d) => s + d.first_unmet, 0);
       const totalRemainingSpace = this.districts.reduce((s,d) => s + d.remaining_space, 0);
       const secondTotal = this.districts.reduce((s,d) => s + d.second_dispatch, 0);
@@ -1766,7 +1782,7 @@ const DistrictAlloc = {
       const totalInitialTarget = this.districts.reduce((s,d) => s + d.initial_target, 0);
       const totalFirstDispatch = this.districts.reduce((s,d) => s + d.first_dispatch, 0);
       const remainingGap = Math.max(0, totalFirstUnmet - secondTotal);
-      body.innerHTML = `<div class="info-box">📤 初次分配后，${exhausted} 个区县存在未满足指令，合计 ${fmt(totalFirstUnmet,2)} MW；${receivers} 个区县仍有可调空间，按剩余空间比例接收二次下发 ${fmt(secondTotal,2)} MW。${totalFirstUnmet > totalRemainingSpace + 0.005 ? `仍有 ${fmt(totalFirstUnmet - totalRemainingSpace,2)} MW 缺口，后续由互济修正或市级兜底处理。` : ''}</div>
+      body.innerHTML = `<div class="info-box">📤 初次分配后，${exhausted} 个区县存在未满足指令，合计 ${fmt(totalFirstUnmet,2)} MW；${receivers} 个区县仍有可调空间。全域调动需跨片区协调，可动用比例为剩余空间的 ${fmt(crossK,2)}，本次二次下发 ${fmt(secondTotal,2)} MW。${remainingGap>0.005?`仍有 ${fmt(remainingGap,2)} MW 缺口，由分区轮调互济或市级可中断负荷兜底处理。`:''}</div>
       <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
         <div class="stat-card"><div class="stat-icon blue">🎯</div><div class="stat-value">${fmt(totalInitialTarget,2)}</div><div class="stat-label">初次分配总目标 (MW)</div></div>
         <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-value">${fmt(totalFirstDispatch,2)}</div><div class="stat-label">初次分配已完成 (MW)</div></div>

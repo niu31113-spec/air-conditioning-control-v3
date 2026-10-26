@@ -1,0 +1,2033 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>重庆空调调控管理系统 V3.0 · 计算引擎驱动版</title>
+<style>
+:root{
+  --bg-deep:#0a0e17;--bg-panel:#111827;--bg-card:#1a2235;--bg-hover:#1e2a40;
+  --border:#1e3050;--border-accent:#2a4a7f;--text-primary:#e8edf5;--text-secondary:#8899b4;
+  --text-muted:#5a6d85;--accent:#3b82f6;--accent-glow:rgba(59,130,246,.3);--accent-cyan:#06b6d4;
+  --success:#10b981;--warning:#f59e0b;--danger:#ef4444;--purple:#8b5cf6;--orange:#f97316;
+  --gradient-1:linear-gradient(135deg,#3b82f6,#06b6d4);--font:'Microsoft YaHei','Noto Sans SC',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg-deep);color:var(--text-primary);min-height:100vh;overflow-x:hidden}
+.bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(59,130,246,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow{position:fixed;pointer-events:none;z-index:0;width:600px;height:600px;background:radial-gradient(circle,rgba(59,130,246,.06) 0%,transparent 70%);top:-200px;right:-100px}
+.app{position:relative;z-index:1;display:flex;min-height:100vh}
+.sidebar{width:240px;min-width:240px;background:var(--bg-panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0;position:sticky;top:0;height:100vh;z-index:10}
+.sidebar-logo{padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.sidebar-logo .logo-icon{width:40px;height:40px;background:var(--gradient-1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;margin-bottom:10px}
+.sidebar-logo h1{font-size:15px;font-weight:700;line-height:1.4}
+.sidebar-logo span{font-size:11px;color:var(--text-muted)}
+.sidebar-nav{flex:1;padding:0 12px;overflow-y:auto}
+.nav-section{margin-bottom:8px}
+.nav-section-title{font-size:10px;text-transform:uppercase;color:var(--text-muted);letter-spacing:.15em;padding:12px 8px 6px;font-weight:500}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:all .2s;font-size:13px;color:var(--text-secondary);margin-bottom:2px;position:relative}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-primary)}
+.nav-item.active{background:rgba(59,130,246,.12);color:var(--accent)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;background:var(--accent);border-radius:0 3px 3px 0}
+.nav-item .nav-icon{font-size:18px;width:22px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted)}
+.status-dot{display:inline-block;width:7px;height:7px;background:var(--success);border-radius:50%;margin-right:6px;box-shadow:0 0 6px var(--success)}
+.main{flex:1;padding:0;overflow-y:auto;height:100vh}
+.page{display:none;padding:28px 32px}
+.page.active{display:block}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.page-header h2{font-size:22px;font-weight:700}
+.page-header .breadcrumb{font-size:12px;color:var(--text-muted)}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;position:relative;overflow:hidden;transition:all .3s}
+.stat-card:hover{border-color:var(--border-accent);box-shadow:0 4px 20px rgba(59,130,246,.08)}
+.stat-card .stat-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px}
+.stat-card .stat-value{font-size:26px;font-weight:700;line-height:1;margin-bottom:4px}
+.stat-card .stat-label{font-size:12px;color:var(--text-muted)}
+.stat-card .stat-change{font-size:11px;margin-top:8px}
+.stat-change.up{color:var(--success)}.stat-change.down{color:var(--danger)}
+.stat-icon.blue{background:rgba(59,130,246,.15);color:var(--accent)}
+.stat-icon.cyan{background:rgba(6,182,212,.15);color:var(--accent-cyan)}
+.stat-icon.purple{background:rgba(139,92,246,.15);color:var(--purple)}
+.stat-icon.orange{background:rgba(249,115,22,.15);color:var(--orange)}
+.stat-icon.green{background:rgba(16,185,129,.15);color:var(--success)}
+.stat-icon.red{background:rgba(239,68,68,.15);color:var(--danger)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border)}
+.panel-header h3{font-size:15px;font-weight:600}
+.panel-body{padding:20px}
+.btn{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s;font-family:var(--font)}
+.btn:hover{opacity:.9;transform:translateY(-1px)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-warning{background:var(--warning);color:#111}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--border-accent);color:var(--accent)}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:6px}
+.btn-cyan{background:var(--accent-cyan);color:#fff}
+.btn-purple{background:var(--purple);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:6px}
+.form-input,.form-select{width:100%;background:var(--bg-deep);border:1px solid var(--border);color:var(--text-primary);padding:8px 12px;border-radius:8px;font-size:13px;font-family:var(--font)}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--accent)}
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.form-row-sm{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+table.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--bg-panel);color:var(--accent);padding:8px 6px;text-align:center;border:1px solid var(--border);white-space:nowrap;font-weight:600}
+.data-table td{background:var(--bg-deep);padding:6px;text-align:center;border:1px solid var(--border);color:var(--text-secondary)}
+.data-table tr:hover td{background:var(--bg-hover)}
+.data-table .editable input{background:transparent;border:none;color:var(--text-primary);width:100%;text-align:center;font-size:12px;padding:2px}
+.data-table .editable input:focus{outline:1px solid var(--accent);background:var(--bg-card)}
+.data-table-wrapper{max-height:500px;overflow-y:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.badge-blue{background:rgba(59,130,246,.15);color:var(--accent)}
+.badge-cyan{background:rgba(6,182,212,.15);color:var(--accent-cyan)}
+.badge-purple{background:rgba(139,92,246,.15);color:var(--purple)}
+.badge-green{background:rgba(16,185,129,.15);color:var(--success)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--danger)}
+.badge-yellow{background:rgba(245,158,11,.15);color:var(--warning)}
+.badge-orange{background:rgba(249,115,22,.15);color:var(--orange)}
+.chart-bar-container{display:flex;align-items:flex-end;gap:12px;height:200px;padding:10px 0}
+.chart-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px}
+.chart-bar{width:70%;border-radius:6px 6px 0 0;min-height:4px;transition:height .4s}
+.chart-bar-value{font-size:11px;font-weight:700}
+.chart-bar-label{font-size:10px;color:var(--text-muted);text-align:center;white-space:nowrap}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px}
+.tab-btn{padding:8px 14px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-secondary);cursor:pointer;font-size:12px;border-radius:8px 8px 0 0;transition:all .2s;font-family:var(--font)}
+.tab-btn.active{background:var(--bg-card);color:var(--accent);border-bottom-color:var(--bg-card);font-weight:600}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.info-box{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px}
+.info-box strong{color:var(--accent)}
+.info-box.green{background:rgba(16,185,129,.08);border-color:rgba(16,185,129,.2)}
+.info-box.green strong{color:var(--success)}
+.info-box.warning{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2)}
+.info-box.warning strong{color:var(--warning)}
+.formula-box{margin:8px 0;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:10px 14px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;text-align:center;color:var(--accent)}
+.mini-tb{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+.mini-tb th,.mini-tb td{border:1px solid rgba(255,255,255,.08);padding:5px 8px;text-align:center}
+.mini-tb th{background:rgba(255,255,255,.05);color:var(--text-muted);font-weight:600}
+details.calc-logic{margin:14px 0;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden}
+details.calc-logic summary{cursor:pointer;padding:12px 16px;font-size:13px;font-weight:600;color:var(--accent);list-style:none;display:flex;align-items:center;gap:8px}
+details.calc-logic summary::-webkit-details-marker{display:none}
+.calc-hint{font-size:11px;font-weight:400;color:var(--text-muted)}
+.calc-body{padding:4px 18px 18px;color:var(--text-secondary);font-size:12.5px;line-height:1.8}
+.calc-body b{color:var(--accent)}
+.calc-step{margin:14px 0 6px;font-weight:700;font-size:13px;color:var(--accent-cyan)}
+.progress-bar-bg{background:var(--bg-deep);border-radius:6px;height:10px;overflow:hidden}
+.progress-bar-fill{height:100%;border-radius:6px;transition:width .4s}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.summary-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
+.summary-card .val{font-size:20px;font-weight:700;color:var(--accent-cyan)}
+.summary-card .lbl{font-size:10px;color:var(--text-muted);margin-top:4px}
+.strategy-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:all .25s}
+.strategy-card:hover{border-color:var(--border-accent);transform:translateY(-2px)}
+.strategy-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 6px 20px var(--accent-glow)}
+.strategy-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:10px}
+.strategy-card h4{font-size:14px;margin-bottom:6px}
+.strategy-card p{font-size:11px;color:var(--text-secondary);line-height:1.5;margin-bottom:10px}
+.strategy-tags{display:flex;gap:6px;flex-wrap:wrap}
+.flow-step{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px}
+.flow-step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
+.flow-step .step-num.done{background:var(--success)}
+.flow-step .step-num.active{background:var(--warning);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.flow-step .step-content{flex:1}
+.flow-step .step-title{font-size:13px;font-weight:600}
+.flow-step .step-desc{font-size:11px;color:var(--text-muted);margin-top:2px}
+.flow-arrow{text-align:center;color:var(--text-muted);font-size:16px;margin:-4px 0}
+.compare-table th{background:var(--bg-panel)}
+.compare-table td.win{color:var(--success);font-weight:600}
+.compare-table td.lose{color:var(--danger)}
+.rank-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.rank-bar-name{width:90px;font-size:12px;color:var(--text-secondary);text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-bar-track{flex:1;height:20px;background:var(--bg-deep);border-radius:4px;overflow:hidden}
+.rank-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-cyan));border-radius:4px;transition:width .4s}
+.rank-bar-val{width:80px;font-size:12px;font-weight:600;color:var(--accent-cyan);flex-shrink:0}
+.flow-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:16px 0}
+.flow-grid .flow-step{display:block;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:18px 16px;text-align:center}
+.flow-grid .flow-step .num{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;margin-bottom:10px}
+.flow-grid .flow-step h4{font-size:15px;line-height:1.35;margin-bottom:8px;color:var(--text-primary)}
+.flow-grid .flow-step p{font-size:12px;color:var(--text-secondary);line-height:1.65}
+@media(max-width:1200px){.flow-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){.flow-grid{grid-template-columns:1fr}}
+.param-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.param-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px}
+.param-card h3{font-size:13px;margin-bottom:8px;color:var(--accent-cyan)}
+.param-card .value-row{display:flex;align-items:center;gap:8px}
+.param-card .value-row input{background:var(--bg-deep);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:6px;font-size:13px;width:100%}
+.param-card .unit{font-size:12px;color:var(--text-muted);white-space:nowrap}
+.param-card .desc{font-size:10px;color:var(--text-muted);margin-top:6px;line-height:1.4}
+.mini-tb{width:100%;border-collapse:collapse;margin:8px 0;font-size:11px}
+.mini-tb th,.mini-tb td{border:1px solid var(--border);padding:5px 8px;text-align:center}
+.mini-tb th{background:var(--bg-panel);color:var(--accent-cyan)}
+.calc-step{font-size:13px;font-weight:600;color:var(--accent);margin:14px 0 6px;padding-left:8px;border-left:3px solid var(--accent)}
+@media(max-width:1100px){
+  .sidebar{width:64px;min-width:64px}
+  .sidebar-logo h1,.sidebar-logo span,.nav-item span:not(.nav-icon),.nav-section-title,.sidebar-footer{display:none}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">⚡</div>
+      <h1>重庆空调调控管理系统</h1>
+      <span>V3.0 · 计算引擎驱动版</span>
+    </div>
+    <nav class="sidebar-nav" id="sidebarNav"></nav>
+    <div class="sidebar-footer"><span class="status-dot"></span> 计算引擎运行中 · v3.0</div>
+  </aside>
+  <main class="main">
+    <div class="page" id="page-ledger"></div>
+    <div class="page" id="page-stratlib"></div>
+    <div class="page" id="page-aggregate"></div>
+    <div class="page" id="page-district"></div>
+    <div class="page" id="page-citypotential"></div>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="jszip.min.js"></script>
+<script>
+/* ============================================================
+   共享工具
+============================================================ */
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._timer);t._timer=setTimeout(()=>t.classList.remove('show'),2600)}
+function fmt(v,d){d=d??2;const n=parseFloat(v);return isNaN(n)?v:n.toFixed(d)}
+function fmtInt(v){return Math.round(v).toLocaleString()}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+const NAV_ITEMS=[
+  {section:'基础数据层',items:[{page:'ledger',icon:'🏢',label:'楼宇台账·潜力计算'},{page:'citypotential',icon:'📈',label:'全市可调潜力推算'}]},
+  {section:'潜力与分配层',items:[{page:'district',icon:'🗺️',label:'区县可调潜力分配'}]},
+  {section:'调控执行层',items:[{page:'aggregate',icon:'🤝',label:'楼宇协同与策略执行'}]}
+];
+function buildNav(){
+  const nav=document.getElementById('sidebarNav');
+  nav.innerHTML=NAV_ITEMS.map(s=>`<div class="nav-section"><div class="nav-section-title">${s.section}</div>${s.items.map(i=>`<div class="nav-item" data-page="${i.page}"><span class="nav-icon">${i.icon}</span> <span>${i.label}</span></div>`).join('')}</div>`).join('');
+  nav.querySelectorAll('.nav-item').forEach(item=>{item.addEventListener('click',()=>navigateTo(item.dataset.page))});
+}
+let currentPage='citypotential';
+function navigateTo(page){
+  currentPage=page;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelector(`.nav-item[data-page="${page}"]`).classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  if(page==='ledger')Ledger.render();
+  if(page==='citypotential')CityPotential.render();
+  if(page==='stratlib')StrategyLib.render();
+  if(page==='district')DistrictAlloc.init();
+  if(page==='aggregate')Aggregate.render();
+  window.scrollTo(0,0);
+}
+
+/* ============================================================
+   第一层：可调潜力计算引擎（核心地基）
+   基于计算说明书：ΔP = P·α·K·ΔT
+   多联机：高响应K取大；冷水机组：K取小且随温度动态修正
+============================================================ */
+const PotentialEngine={
+  // K系数表：不同建筑类型 × 使用年限（单位 1/℃），来自计算说明书表3
+  K_TABLE:{
+    '党政机关':{'5年内':0.45,'5-10年':0.45,'10-15年':0.40},
+    '企事业单位':{'5年内':0.40,'5-10年':0.40,'10-15年':0.38},
+    '办公写字楼':{'5年内':0.45,'5-10年':0.45,'10-15年':0.40},
+    '商业综合体':{'5年内':0.40,'5-10年':0.40,'10-15年':0.38},
+    '商超':{'5年内':0.38,'5-10年':0.38,'10-15年':0.36},
+    '酒店':{'5年内':0.38,'5-10年':0.38,'10-15年':0.35}
+  },
+  // 用户响应系数α：无激励 / 有激励，来自计算说明书表3（26℃基准）
+  ALPHA_TABLE:{
+    '党政机关':{'无激励':0.075,'有激励':0.10},
+    '企事业单位':{'无激励':0.005,'有激励':0.075},
+    '办公写字楼':{'无激励':0.05,'有激励':0.075},
+    '商业综合体':{'无激励':0.05,'有激励':0.075},
+    '商超':{'无激励':0.005,'有激励':0.05},
+    '酒店':{'无激励':0.0,'有激励':0.025}
+  },
+  HISTORY_RATE:{'党政机关':0.95,'企事业单位':0.85,'办公写字楼':0.92,'商业综合体':0.88,'商超':0.80,'酒店':0.75},
+  // 冷水机组冷冻水温提升效率系数：每提升1℃，压缩机功耗下降约3%（ASHRAE标准）
+  CHW_EFFICIENCY_PER_C:0.03,
+  // 室外温度分段削减率（来自计算说明书）
+  TEMP_SEGMENTS:{
+    '30-34℃':{reductionRate:0.062,label:'30-34℃'},
+    '35-39℃':{reductionRate:0.072,label:'35-39℃'},
+    '40+℃':{reductionRate:0.082,label:'40℃以上'}
+  },
+
+  // 获取K系数
+  getK(buildingType,age){
+    const tier=this.K_TABLE[buildingType]||this.K_TABLE['办公写字楼'];
+    return tier[age]||0.40;
+  },
+  // 获取响应系数α
+  getAlpha(buildingType,incentive){
+    const tier=this.ALPHA_TABLE[buildingType]||this.ALPHA_TABLE['办公写字楼'];
+    return tier[incentive]??0.05;
+  },
+  getHistoryRate(building){return Number.isFinite(building.historyRate)?building.historyRate:(this.HISTORY_RATE[building.type]??0.85);},
+  actualReduction(building,target,available){
+    const requested=Math.max(0,Number(target)||0);
+    const capacity=Math.max(0,Number(available)||0);
+    return Math.min(requested,capacity*this.getHistoryRate(building));
+  },
+  // 获取温度分段
+  getTempSegment(outdoorTemp){
+    if(outdoorTemp>=40)return this.TEMP_SEGMENTS['40+℃'];
+    if(outdoorTemp>=35)return this.TEMP_SEGMENTS['35-39℃'];
+    return this.TEMP_SEGMENTS['30-34℃'];
+  },
+
+  /**
+   * 计算单栋楼宇可调潜力（核心公式）
+   * @param {Object} building - 楼宇对象
+   * @param {number} outdoorTemp - 室外温度℃
+   * @param {number} setTemp - 室内设定温度℃
+   * @param {string} incentive - '无激励' / '有激励'
+   * @param {number} tempOffset - 温度上调幅度℃（默认1）
+   * @returns {Object} 潜力计算结果
+   */
+  calc(building,outdoorTemp,setTemp,incentive,tempOffset){
+    incentive=incentive==='按楼宇配置'?(building.incentive||'有激励'):incentive;
+    const requestedOffset=tempOffset==='按楼宇配置'?(building.tempOffset??1):(tempOffset??1);
+    tempOffset=Math.min(Math.max(0,requestedOffset),building.maxTempOffset??requestedOffset);
+    const P=building.baseLoad; // 基准负荷 kW
+    setTemp=building.setTemp??setTemp??26;
+    const K=this.getK(building.type,building.age); // 空调本体可调潜力系数
+    const alpha=this.getAlpha(building.type,incentive); // 用户响应系数
+    const deltaT=Math.max(0,outdoorTemp-setTemp); // 室内外温差
+    const seg=this.getTempSegment(outdoorTemp);
+
+    // 多联机模型：ΔP = P·α·K·ΔT·温度上调幅度
+    // 冷水机组模型：末端负荷削减 + 冷冻水温效率提升
+    let potential=0;
+    let detail={};
+
+    if(Number.isFinite(building.sourcePotential)){
+      const anchorAlpha=this.getAlpha(building.type,'有激励');
+      const tempFactor=seg.reductionRate/this.TEMP_SEGMENTS['35-39℃'].reductionRate;
+      const incentiveFactor=anchorAlpha===0?1:alpha/anchorAlpha;
+      potential=building.sourcePotential*tempFactor*incentiveFactor*tempOffset;
+      detail={model:'实测标杆情景修正',formula:'ΔP = P实测 × f温度 × f响应 × Δt',
+        components:{实测标杆:building.sourcePotential,温度修正:tempFactor,响应修正:incentiveFactor,上调幅度:tempOffset}};
+    }else if(building.acType==='多联机'){
+      // 多联机：高响应特性，K取大，线性关系
+      potential=P*alpha*K*deltaT*tempOffset;
+      detail={model:'多联机面板控制型',formula:'ΔP = P·α·K·ΔT·Δt',
+        components:{基准负荷P:P,响应系数α:alpha,K系数:K,温差ΔT:deltaT,上调幅度:tempOffset}};
+    }else{
+      // 冷水机组：末端削减（量变）+ 冷冻水温效率提升（质变）
+      // 末端负荷削减率 = 削减率/℃ × 上调幅度
+      const terminalReduction=P*seg.reductionRate*tempOffset*alpha;
+      // 冷冻水温提升效率收益：基准功率 × 3%/℃ × 上调幅度
+      const chwEfficiencyGain=P*this.CHW_EFFICIENCY_PER_C*tempOffset*0.5; // 0.5为实际可利用率
+      potential=terminalReduction+chwEfficiencyGain;
+      detail={model:'冷水机组冷冻水温调节型',formula:'ΔP = P·η(Tout)·Δt·α + P·3%·Δt',
+        components:{基准负荷P:P,末端削减率:seg.reductionRate,响应系数α:alpha,
+          末端削减量:terminalReduction,冷冻水效率收益:chwEfficiencyGain,温度分段:seg.label}};
+    }
+
+    // 安全上限单独用于风险提示；不覆盖经确认的实测潜力口径。
+    const maxPotential=Number.isFinite(building.safeLimit)?building.safeLimit:P*0.30;
+    const actualPotential=Math.max(0,potential);
+
+    return {
+      building:building.name,
+      type:building.type,
+      acType:building.acType,
+      baseLoad:P,
+      outdoorTemp:outdoorTemp,
+      setTemp:setTemp,
+      incentive:incentive,
+      potential:Math.round(actualPotential*100)/100,
+      potentialPct:Math.round(actualPotential/P*1000)/10,
+      maxPotential:Math.round(maxPotential*100)/100,
+      capped:potential>maxPotential,
+      detail:detail
+    };
+  },
+
+  // 批量计算所有楼宇潜力
+  calcAll(buildings,outdoorTemp,setTemp,incentive,tempOffset){
+    return buildings.map(b=>this.calc(b,outdoorTemp,setTemp,incentive,tempOffset));
+  },
+
+  // 汇总潜力
+  summarize(results){
+    const total=results.reduce((s,r)=>s+r.potential,0);
+    const byType={};
+    const byAC={};
+    results.forEach(r=>{
+      byType[r.type]=(byType[r.type]||0)+r.potential;
+      byAC[r.acType]=(byAC[r.acType]||0)+r.potential;
+    });
+    return{total,byType,byAC,count:results.length};
+  }
+};
+
+/* ============================================================
+   第二层：六类建筑三级策略库（可调用）
+   编码规则：建筑类别—系统形式—调控方式—等级
+   例：JG-WC-F-L2 = 党政机关·水冷·柔性调节·Ⅱ级
+============================================================ */
+const StrategyLibrary={
+  TYPE_CODES:{'党政机关':'JG','企事业单位':'QS','办公写字楼':'BG','商业综合体':'SZ','商超':'SC','酒店':'JD'},
+  // 六类建筑 × 三级策略定义（来自调控策略说明书表6-1）
+  STRATEGIES:{
+    '党政机关':{
+      icon:'🏛️',restricted:'档案、机房、重要会议、政务窗口',
+      levels:[
+        {code:'L1',name:'办公稳态轻调',desc:'小范围末端温度提高1℃，优先普通办公区，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
+        {code:'L2',name:'分区协同削峰',desc:'扩大参与区域，开展分区轮调，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
+        {code:'L3',name:'重点避让深度响应',desc:'在已验证范围继续扩大，避让重要区域，互动目标20%',tempOffset:2,zoneFraction:0.7,interactiveTarget:20}
+      ]
+    },
+    '企事业单位':{
+      icon:'🏭',restricted:'工艺、实验、恒温恒湿、连续保障区域',
+      levels:[
+        {code:'L1',name:'办公辅助轻调',desc:'办公辅助区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
+        {code:'L2',name:'非工艺区协同',desc:'非工艺区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
+        {code:'L3',name:'生产边界受限响应',desc:'生产边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
+      ]
+    },
+    '办公写字楼':{
+      icon:'🏢',restricted:'加班租户、强日晒区域、敏感用户',
+      levels:[
+        {code:'L1',name:'租户分组轻调',desc:'租户分组轻调，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
+        {code:'L2',name:'楼层协同削峰',desc:'楼层协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
+        {code:'L3',name:'多租户受限深度响应',desc:'多租户受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.65,interactiveTarget:20}
+      ]
+    },
+    '商业综合体':{
+      icon:'🛍️',restricted:'餐饮、影院、儿童区、大型活动及必要新风',
+      levels:[
+        {code:'L1',name:'低客流温和响应',desc:'低客流区域温和响应，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
+        {code:'L2',name:'业态轮调削峰',desc:'业态轮调削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
+        {code:'L3',name:'核心避让深度响应',desc:'核心避让深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
+      ]
+    },
+    '商超':{
+      icon:'🛒',restricted:'冷链、生鲜、熟食及空气品质不足区域',
+      levels:[
+        {code:'L1',name:'后勤区域轻调',desc:'后勤区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
+        {code:'L2',name:'非冷链协同削峰',desc:'非冷链区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.4,interactiveTarget:15},
+        {code:'L3',name:'营业边界受限响应',desc:'营业边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.55,interactiveTarget:20}
+      ]
+    },
+    '酒店':{
+      icon:'🏨',restricted:'在用客房、会议宴会、餐饮高峰及重要接待',
+      levels:[
+        {code:'L1',name:'公共区域轻调',desc:'公共区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
+        {code:'L2',name:'空置空间协同',desc:'空置空间协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.35,interactiveTarget:15},
+        {code:'L3',name:'低入住受限持续响应',desc:'低入住受限持续响应，互动目标20%',tempOffset:2,zoneFraction:0.5,interactiveTarget:20}
+      ]
+    }
+  },
+
+  // 生成策略编码
+  genCode(buildingType,acType,mode,level){
+    const typeCode=this.TYPE_CODES[buildingType]||'BG';
+    const hasVRF=acType.includes('多联机'),hasWC=acType.includes('冷水机组');
+    const acCode=hasVRF&&hasWC?'MIX':hasVRF?'VRF':'WC';
+    const modeCode=mode==='柔性调节'?'F':'I';
+    return `${typeCode}-${acCode}-${modeCode}-${level}`;
+  },
+
+  /**
+   * 策略匹配算法（来自调控策略说明书4.2节）
+   * 原则：优先选择能满足目标的最低等级策略，由Ⅰ级向Ⅱ级、Ⅲ级逐级调用
+   * @param {Object} building - 楼宇对象
+   * @param {number} targetReduction - 目标削减量 kW
+   * @param {number} outdoorTemp - 室外温度
+   * @param {string} incentive - 激励政策
+   * @returns {Object} 匹配结果
+   */
+  match(building,targetReduction,outdoorTemp,incentive){
+    const strat=this.STRATEGIES[building.type]||this.STRATEGIES['办公写字楼'];
+    const setTemp=building.setTemp??26;
+    let matchedLevel=0;
+    const levelResults=[];
+
+    // 逐级计算每级能提供的削减量
+    for(let i=0;i<3;i++){
+      const lv=strat.levels[i];
+      const pot=PotentialEngine.calc(building,outdoorTemp,setTemp,incentive,lv.tempOffset);
+      // 实际可调 = 潜力 × 参与区域比例
+      const actualAdjustable=pot.potential*lv.zoneFraction;
+      levelResults.push({level:i+1,code:lv.code,name:lv.name,potential:pot.potential,
+        zoneFraction:lv.zoneFraction,actualAdjustable:actualAdjustable,
+        interactiveTarget:lv.interactiveTarget,tempOffset:lv.tempOffset,
+        meetsTarget:actualAdjustable>=targetReduction});
+      if(actualAdjustable>=targetReduction&&matchedLevel===0)matchedLevel=i+1;
+    }
+
+    // 如果三级都不满足，返回最高级+剩余缺口
+    const finalLevel=matchedLevel||3;
+    const selected=levelResults[finalLevel-1];
+    const remainingGap=Math.max(0,targetReduction-selected.actualAdjustable);
+
+    return{
+      building:building.name,
+      type:building.type,
+      acType:building.acType,
+      targetReduction:targetReduction,
+      matchedLevel:finalLevel,
+      matchedLevelName:selected.name,
+      strategyCode:this.genCode(building.type,building.acType,'柔性调节',selected.code),
+      actualAdjustable:Math.round(selected.actualAdjustable*100)/100,
+      remainingGap:Math.round(remainingGap*100)/100,
+      meetsTarget:remainingGap<=0.01,
+      tempOffset:selected.tempOffset,
+      zoneFraction:selected.zoneFraction,
+      interactiveTarget:selected.interactiveTarget,
+      restricted:strat.restricted,
+      allLevels:levelResults
+    };
+  }
+};
+
+/* ============================================================
+   楼宇台账数据（61户有效业务样本）
+   sourcePotential 为已确认实测标杆；情景参数只对该标杆作修正。
+============================================================ */
+const RAW_BUILDINGS=[
+  [1,'重庆市市政府 2 号楼','渝中区','党政机关','多联机',1038.83,727.18,581.74,552.66],[2,'渝北区委办区委','渝北区','党政机关','冷水机组',560,450,180,300],[3,'华岩镇人民政府办公楼','九龙坡区','党政机关','多联机',1260,860,190,220],[4,'江北区政府大楼','江北区','党政机关','多联机＋风冷',3800,2860,411.6,391.02],[5,'南岸区政务服务中心','南岸区','党政机关','多联机',2800,1960,784,744.8],[6,'沙坪坝区行政大楼','沙坪坝区','党政机关','多联机',3200,2240,596,651.2],[7,'巴南区政务中心','巴南区','党政机关','冷水机组',1834,1640,302.4,287.28],[8,'万州区机关事务管理中心江南行政中心','万州区','党政机关','多联机',2500,1750,500,665],[9,'重庆市涪陵区政务服务管理事务中心','涪陵区','党政机关','风冷机组',2810,2550,273,259.35],[10,'黔江区政府办公楼','黔江区','党政机关','多联机',2200,1540,616,585.2],
+  [11,'北碚科技创业中心','北碚区','企事业单位','多联机',4200,2940,576,617.2],[12,'空港工业园','渝北区','企事业单位','冷水机组',3042,2660,264,310],[13,'重庆环球金融中心','渝中区','企事业单位','多联机',1500,1050,630,598.5],[14,'重庆电力公司','渝中区','企事业单位','冷水机组',1000,700,262,238.9],[15,'西南医院门诊楼','沙坪坝区','企事业单位','冷水机组',18000,12600,756,718.2],[16,'重庆市设计院办公楼','渝中区','企事业单位','多联机',3000,2100,340,398],[17,'重庆钢铁集团总部','大渡口区','企事业单位','冷水机组',9500,6650,399,379.05],[18,'重庆邮电大学科研楼','南岸区','企事业单位','多联机',2700,1890,356,518.2],[19,'江津区疾控中心','江津区','企事业单位','多联机',2400,1680,472,538.4],[20,'合川区人民医院','合川区','企事业单位','冷水机组',8800,6160,369.6,351.12],
+  [21,'恒大中渝广场（写字楼）','渝中区','办公写字楼','冷水机组',5000,3000,880,900],[22,'重庆国金中心 写字楼','江北区','办公写字楼','冷水机组',500,400,105,150],[23,'环球大厦','渝中区','办公写字楼','冷水机组',4116,2000,500,570],[24,'重庆星光 68 号写字楼','江北区','办公写字楼','冷水机组',1800,1260,240,280],[25,'重庆南坪万达广场写字楼','南岸区','办公写字楼','多联机',4500,3150,1260,1197],[26,'重庆时代汇写字楼','渝中区','办公写字楼','冷水机组',1600,1120,272,338.4],[27,'重庆华润万象城写字楼','九龙坡区','办公写字楼','冷水机组',4000,3800,588,558.6],[28,'互联网产业园2期','两江新区','办公写字楼','多联机',4800,3360,644,876.8],[29,'重庆永川万达广场写字楼','永川区','办公写字楼','多联机',3200,2240,896,851.2],[30,'重庆铜梁吾悦广场写字楼','铜梁区','办公写字楼','多联机',2900,2030,812,771.4],
+  [31,'万象城','九龙坡区','商业综合体','冷水机组',13806,6800,910.97,865.42],[32,'恒大中渝广场（商场）','渝中区','商业综合体','冷水机组',5515.12,3860.58,231.63,250.05],[33,'龙湖西城天街','渝中区','商业综合体','多联机',1440,900,200,500],[34,'北城天街','江北区','商业综合体','冷水机组',12000,10400,1820,2000],[35,'大融城','江北区','商业综合体','冷水机组',9500,6650,1020,1100],[36,'重庆解放碑来福士广场','渝中区','商业综合体','冷水机组 + 多联机',25000,20000,1680,2596],[37,'重庆南坪协信星光时代广场','南岸区','商业综合体','冷水机组',12000,9600,1428,1356.6],[38,'重庆时代广场','渝中区','商业综合体','冷水机组',13000,11000,1560,1482],[39,'万州万达广场','万州区','商业综合体','冷水机组',3600,3400,1044,991.8],[40,'涪陵万达广场','涪陵区','商业综合体','冷水机组 + 多联机',12000,10000,948,900.6],
+  [41,'富力假日酒店','渝中区','酒店','冷水机组',3300,2600,512,636.4],[42,'光环金科大酒店','渝北区','酒店','冷水机组',2565,2100,844,876],[43,'兰里酒店','渝中区','酒店','多联机',600,402,43.74,41.55],[44,'悦来温德姆','两江新区','酒店','冷水机组',3200,3050,660,797],[45,'重庆逸锦酒店','九龙区','酒店','冷水机组',1980,1400,150,350],[46,'重庆江北国际机场万豪酒店','渝北区','酒店','冷水机组',3000,2200,250,450],[47,'重庆融创永乐半山酒店','沙坪坝区','酒店','多联机',733,630,156,218.2],[48,'重庆南坪凯宾斯基酒店','南岸区','酒店','多联机',4200,2900,372,438.4],[49,'万州富力希尔顿酒店','万州区','酒店','多联机',3500,2880,450,460],[50,'重庆市江津大酒店','江津区','酒店','冷水机组',2300,1750,360,400],
+  [51,'华熙超市','渝中区','商超','多联机',3000,2200,560,532.76],[52,'重庆永辉超市总部门店','渝中区','商超','冷水机组',2400,1590,336,319.2],[53,'重庆新世纪百货解放碑店','渝中区','商超','冷水机组',2200,1440,302.4,287.28],[54,'重庆沃尔玛购物广场','南岸区','商超','冷水机组',3800,3760,285.6,271.32],[55,'重庆家乐福沙坪坝店','沙坪坝区','商超','冷水机组',3500,2550,273,259.35],[56,'重庆大润发九龙坡店','九龙坡区','商超','多联机',2000,1200,252,239.4],[57,'麦德龙','江北区','商超','冷水机组',4800,4060,643.6,731.42],[58,'万州永辉超市旗舰店','万州区','商超','冷水机组',1640,1440,218,207.48],[59,'黔江重百商场','黔江区','商超','冷水机组',3500,3150,189,179.55],[60,'红星美凯龙','渝中区','商超','冷水机组',1760,1240,151,436.4],[61,'宜家家居','渝中区','商超','冷水机组',1500,1300,200,276.8]
+];
+const BUILDINGS=RAW_BUILDINGS.map(([id,name,district,type,acType,capacity,baseLoad,sourcePotential,safeLimit])=>({
+  id,name,district,type,acType,capacity,baseLoad,sourcePotential,safeLimit,
+  age:'未采集',setTemp:26,incentive:'有激励',tempOffset:1,
+  maxTempOffset:{'党政机关':2,'企事业单位':1.5,'办公写字楼':2,'商业综合体':1.5,'酒店':1,'商超':1}[type]||1,
+  priority:['办公写字楼','商业综合体'].includes(type)?'一级':['酒店','商超'].includes(type)?'二级':'三级'
+}));
+const BuildingConfigStore={
+  key:'ac-v3-building-config',
+  load(){try{const saved=JSON.parse(localStorage.getItem(this.key)||'{}');BUILDINGS.forEach(b=>{if(saved[b.id])Object.assign(b,saved[b.id])})}catch(e){}},
+  save(){try{const data={};BUILDINGS.forEach(b=>data[b.id]={setTemp:b.setTemp,incentive:b.incentive,tempOffset:b.tempOffset,maxTempOffset:b.maxTempOffset});localStorage.setItem(this.key,JSON.stringify(data))}catch(e){showToast('楼宇配置保存失败')}}
+};
+const DATA_PROFILE={
+  version:'统一业务口径 V3.1',updated:'2026-09-03',
+  expected:{count:61,baseLoad:203819.76,sourcePotential:33107.28},
+  validate(){
+    const actual={count:BUILDINGS.length,baseLoad:BUILDINGS.reduce((s,b)=>s+b.baseLoad,0),sourcePotential:BUILDINGS.reduce((s,b)=>s+b.sourcePotential,0)};
+    const pass=actual.count===this.expected.count&&Math.abs(actual.baseLoad-this.expected.baseLoad)<0.01&&Math.abs(actual.sourcePotential-this.expected.sourcePotential)<0.01;
+    return{pass,actual};
+  }
+};
+/* ============================================================
+   第四层：单体调控执行闭环模拟器
+   触发→检查→能力判断→策略匹配→执行→校核→升级/降级→恢复
+============================================================ */
+const SingleExecution={
+  buildTimeline(baseline,actualReduction,checkInterval,duration,isVRF){
+    const holdMinutes=Math.max(checkInterval*2,Number(duration)||60);
+    const batches=isVRF?3:2;
+    const reboundRate=isVRF?0.06:0.10;
+    const points=[
+      {minute:-15,stage:'基准观察',load:baseline,reduction:0},
+      {minute:0,stage:'指令下发',load:baseline,reduction:0},
+      {minute:checkInterval,stage:'响应爬坡',load:baseline-actualReduction*0.65,reduction:actualReduction*0.65},
+      {minute:checkInterval*2,stage:'效果校核',load:baseline-actualReduction,reduction:actualReduction},
+      {minute:holdMinutes,stage:'稳定保持',load:baseline-actualReduction,reduction:actualReduction}
+    ];
+    for(let i=1;i<=batches;i++){
+      const reduction=actualReduction*(1-i/batches);
+      points.push({minute:holdMinutes+i*checkInterval,stage:`恢复第${i}批`,load:baseline-reduction,reduction});
+    }
+    const recoveryEnd=holdMinutes+batches*checkInterval;
+    const rebound=actualReduction*reboundRate;
+    points.push({minute:recoveryEnd+checkInterval,stage:'反弹校核',load:baseline+rebound,reduction:-rebound});
+    points.push({minute:recoveryEnd+checkInterval*2,stage:'恢复稳定',load:baseline,reduction:0});
+    return points.map(p=>({...p,load:Math.round(p.load*100)/100,reduction:Math.round(p.reduction*100)/100}));
+  },
+  /**
+   * 执行单体调控闭环模拟
+   * @param {Object} building - 楼宇对象
+   * @param {number} targetReduction - 目标削减量
+   * @param {number} outdoorTemp - 室外温度
+   * @param {string} incentive - 激励政策
+   * @returns {Object} 执行过程记录
+   */
+  execute(building,targetReduction,outdoorTemp,incentive,duration=60){
+    const setTemp=building.setTemp??26;
+    const match=StrategyLibrary.match(building,targetReduction,outdoorTemp,incentive);
+    const isMixed=building.acType.includes('多联机')&&building.acType.includes('冷水机组');
+    const isVRF=building.acType.includes('多联机')&&!building.acType.includes('冷水机组');
+    const checkInterval=isVRF?5:15; // 混合系统按较慢的水冷响应周期统一校核
+    duration=Math.max(checkInterval*2,Number(duration)||60);
+    const executedAt=new Date().toLocaleString('zh-CN',{hour12:false});
+    const phases=[];
+
+    // 阶段1：任务触发
+    phases.push({phase:'任务触发',status:'done',time:'0min',
+      desc:`接收调控任务，目标削减 ${targetReduction}kW，记录基准负荷 ${building.baseLoad}kW`});
+
+    // 阶段2：状态检查
+    const checkOK=building.available!==false;
+    phases.push({phase:'状态检查',status:checkOK?'done':'blocked',time:`${checkInterval}min`,
+      desc:checkOK?'设备、通信、计量正常，存在可调区域，通过检查':'设备异常或无可调区域，阻断执行'});
+
+    if(!checkOK){
+      return{building:building.name,success:false,phases:phases,match:match,
+        target:targetReduction,actualReduction:0,achievementRate:0,reason:'状态检查未通过，不具备调控条件',exitReason:'设备或通信状态异常'};
+    }
+
+    // 阶段3：能力判断
+    const capacity=PotentialEngine.calc(building,outdoorTemp,setTemp,incentive,match.tempOffset);
+    phases.push({phase:'能力判断',status:'done',time:`${checkInterval*2}min`,
+      desc:`当前可调潜力 ${capacity.potential}kW（${capacity.potentialPct}%），安全上限 ${capacity.maxPotential}kW`});
+
+    // 阶段4：策略匹配
+    phases.push({phase:'策略匹配',status:'done',time:`${checkInterval*2}min`,
+      desc:`匹配到 ${match.matchedLevel===1?'Ⅰ级':match.matchedLevel===2?'Ⅱ级':'Ⅲ级'}策略 ${match.matchedLevelName}，编码 ${match.strategyCode}${isMixed?'；分别调用多联机末端与水冷末端/冷源分支':''}`});
+
+    // 阶段5：指令执行
+    phases.push({phase:'指令执行',status:'active',time:`${checkInterval*3}min`,
+      desc:`下发指令：末端温度上调 ${match.tempOffset}℃，参与区域 ${Math.round(match.zoneFraction*100)}%，互动目标 ${match.interactiveTarget}%`});
+
+    // 阶段6：效果校核（统一确定性口径）
+    let currentLevel=match.matchedLevel;
+    const responseRate=PotentialEngine.getHistoryRate(building);
+    const actualReduction=PotentialEngine.actualReduction(building,targetReduction,match.actualAdjustable);
+    const remainingGap=Math.max(0,targetReduction-actualReduction);
+    phases.push({phase:'效果校核',status:remainingGap<=targetReduction*0.05?'done':'warning',time:`${checkInterval*4}min`,
+      desc:`可提供量 ${Math.round(match.actualAdjustable)}kW × 历史响应率 ${Math.round(responseRate*100)}%，实际削减 ${Math.round(actualReduction)}kW${remainingGap>0?`，剩余缺口 ${Math.round(remainingGap)}kW`:'，达到目标'}`});
+
+    phases.push({phase:'稳定保持',status:'done',time:`至${duration}min`,
+      desc:`按当前策略保持 ${duration}min，期间每 ${checkInterval}min 复核一次负荷与设备状态`});
+
+    // 阶段7：恢复
+    phases.push({phase:'分批恢复',status:'done',time:`${duration}min后`,
+      desc:`重点区域优先恢复，末端先行冷源后调，每批观察 ${checkInterval}min，分 ${isVRF?3:isMixed?3:2} 批恢复`});
+
+    const finalReduction=actualReduction;
+    const timeline=this.buildTimeline(building.baseLoad,finalReduction,checkInterval,duration,isVRF);
+    const reboundPeak=Math.max(...timeline.map(p=>p.load))-building.baseLoad;
+    const achievementRate=targetReduction>0?Math.round(finalReduction/targetReduction*1000)/10:0;
+    const exitReason=achievementRate>=95?'目标完成，按计划退出':match.restricted?'受安全边界限制，返回剩余缺口':'可用潜力或历史响应率不足';
+    return{
+      building:building.name,
+      type:building.type,
+      acType:building.acType,
+      success:true,
+      target:targetReduction,
+      actualReduction:Math.round(finalReduction),
+      achievementRate,
+      finalLevel:currentLevel,
+      strategyCode:match.strategyCode,
+      checkInterval:checkInterval,
+      phases:phases,
+      timeline,
+      duration:Number(duration)||60,
+      executedAt,
+      reboundPeak:Math.round(reboundPeak*100)/100,
+      exitReason,
+      comfortLoss:Math.round(match.tempOffset*10)/10,
+      restricted:match.restricted
+    };
+  }
+};
+
+/* ============================================================
+   模块二：楼宇台账 · 潜力计算（基础数据层）
+============================================================ */
+const Ledger={
+  filterType:'全部',filterAC:'全部',filterDistrict:'全部',
+  outdoorTemp:35,incentive:'按楼宇配置',tempMode:'building',tempOffset:1,
+  render(){
+    const el=document.getElementById('page-ledger');
+    const types=['全部',...new Set(BUILDINGS.map(b=>b.type))];
+    const acs=['全部',...new Set(BUILDINGS.map(b=>b.acType))];
+    const districts=['全部',...new Set(BUILDINGS.map(b=>b.district))];
+
+    let filtered=BUILDINGS;
+    if(this.filterType!=='全部')filtered=filtered.filter(b=>b.type===this.filterType);
+    if(this.filterAC!=='全部')filtered=filtered.filter(b=>b.acType===this.filterAC);
+    if(this.filterDistrict!=='全部')filtered=filtered.filter(b=>b.district===this.filterDistrict);
+
+    const offsetArg=this.tempMode==='building'?'按楼宇配置':this.tempOffset;
+    const results=PotentialEngine.calcAll(filtered,this.outdoorTemp,null,this.incentive,offsetArg);
+    const summary=PotentialEngine.summarize(results);
+    const filteredBaseLoad=filtered.reduce((s,b)=>s+b.baseLoad,0);
+    const quality=DATA_PROFILE.validate();
+
+    el.innerHTML=`
+    <div class="page-header">
+      <div><h2>楼宇台账 · 可调潜力计算</h2><div class="breadcrumb">基础数据层 / 实测标杆与情景修正</div></div>
+      <button class="btn btn-outline btn-sm" onclick="Ledger.exportCSV()">📥 导出潜力计算结果</button>
+    </div>
+
+    <div class="info-box">📐 <strong>统一业务口径：</strong>基准负荷和实测标杆来自同一批61户有效台账；35–39℃、有激励、上调1℃时回归实测标杆，其余参数仅作情景修正。筛选会同步更新楼宇数、基准负荷、潜力和平均比例。<span class="badge ${quality.pass?'badge-green':'badge-red'}" style="margin-left:8px">${quality.pass?'口径校验通过':'数据校验异常'}</span><span style="margin-left:8px;color:var(--text-muted)">${DATA_PROFILE.version} · ${DATA_PROFILE.updated}</span></div>
+
+    <div class="panel">
+      <div class="panel-header"><h3>计算参数</h3></div>
+      <div class="panel-body">
+        <div class="form-row">
+          <div class="form-group"><label>室外温度 (℃)</label><input class="form-input" type="number" id="lgOutdoor" value="${this.outdoorTemp}" onchange="Ledger.updateParams()"></div>
+          <div class="form-group"><label>激励政策口径</label><select class="form-select" id="lgIncentive" onchange="Ledger.updateParams()"><option ${this.incentive==='按楼宇配置'?'selected':''}>按楼宇配置</option><option ${this.incentive==='无激励'?'selected':''}>全部无激励</option><option ${this.incentive==='有激励'?'selected':''}>全部有激励</option></select></div>
+          <div class="form-group"><label>上调温度口径</label><select class="form-select" id="lgTempMode" onchange="Ledger.updateParams()"><option value="building" ${this.tempMode==='building'?'selected':''}>按楼宇配置</option><option value="override" ${this.tempMode==='override'?'selected':''}>统一覆盖值</option></select></div>
+          <div class="form-group"><label>统一覆盖值 (℃)</label><input class="form-input" type="number" id="lgOffset" value="${this.tempOffset}" step="0.5" min="0" ${this.tempMode==='building'?'disabled':''} onchange="Ledger.updateParams()"></div>
+          <div class="form-group"><label>业态筛选</label><select class="form-select" onchange="Ledger.filterType=this.value;Ledger.render()">${types.map(t=>`<option ${this.filterType===t?'selected':''}>${t}</option>`).join('')}</select></div>
+          <div class="form-group"><label>空调类型</label><select class="form-select" onchange="Ledger.filterAC=this.value;Ledger.render()">${acs.map(t=>`<option ${this.filterAC===t?'selected':''}>${t}</option>`).join('')}</select></div>
+          <div class="form-group"><label>区县筛选</label><select class="form-select" onchange="Ledger.filterDistrict=this.value;Ledger.render()">${districts.map(t=>`<option ${this.filterDistrict===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon blue">🏢</div><div class="stat-value">${summary.count}</div><div class="stat-label">筛选后楼宇数</div></div>
+      <div class="stat-card"><div class="stat-icon cyan">⚡</div><div class="stat-value">${fmt(filteredBaseLoad/1000,1)}</div><div class="stat-label">基准负荷合计 (MW)</div><div class="stat-change up">${summary.count} 户样本合计</div></div>
+      <div class="stat-card"><div class="stat-icon purple">📊</div><div class="stat-value">${fmt(summary.total/1000,1)}</div><div class="stat-label">可调潜力合计 (MW)</div><div class="stat-change up">${fmt(summary.total,0)} kW</div></div>
+      <div class="stat-card"><div class="stat-icon orange">%</div><div class="stat-value">${filteredBaseLoad?Math.round(summary.total/filteredBaseLoad*1000)/10:0}%</div><div class="stat-label">平均可调比例</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h3>楼宇台账与潜力计算结果</h3><span style="font-size:11px;color:var(--text-muted)">点击行查看计算详情</span></div>
+      <div class="panel-body" style="padding:0">
+        <div class="data-table-wrapper">
+          <table class="data-table">
+            <thead><tr>
+              <th>序号</th><th>楼宇名称</th><th>业态</th><th>空调类型</th><th>区县</th>
+              <th>基准负荷(kW)</th><th>激励状态</th><th>当前设定(℃)</th><th>最大上调(℃)</th><th>采用上调(℃)</th>
+              <th>实测标杆(kW)</th><th>情景潜力(kW)</th><th>可调比例</th><th>风险提示</th>
+            </tr></thead>
+            <tbody>
+              ${results.map((r,i)=>{
+                const b=filtered[i];
+                const K=PotentialEngine.getK(b.type,b.age);
+                const alpha=PotentialEngine.getAlpha(b.type,this.incentive);
+                return `<tr style="cursor:pointer" onclick="Ledger.showDetail(${b.id})">
+                  <td>${b.id}</td><td style="text-align:left;font-weight:600">${b.name}</td>
+                  <td><span class="badge badge-blue">${b.type}</span></td>
+                  <td><span class="badge ${b.acType==='多联机'?'badge-purple':'badge-cyan'}">${b.acType}</span></td>
+                  <td>${b.district}</td>
+                  <td>${fmtInt(b.baseLoad)}</td>
+                  <td><select class="form-select" style="min-width:88px;padding:4px" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'incentive',this.value)"><option ${b.incentive==='有激励'?'selected':''}>有激励</option><option ${b.incentive==='无激励'?'selected':''}>无激励</option></select></td>
+                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" value="${b.setTemp}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'setTemp',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" value="${b.maxTempOffset}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'maxTempOffset',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" max="${b.maxTempOffset}" value="${b.tempOffset}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'tempOffset',this.value)"></td>
+                  <td>${fmt(b.sourcePotential,2)}</td>
+                  <td style="font-weight:700;color:var(--accent-cyan)">${fmt(r.potential,1)}</td>
+                  <td>${r.potentialPct}%</td>
+                  <td>${r.capped?'<span class="badge badge-red">超安全上限</span>':'<span class="badge badge-green">正常</span>'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  },
+  updateParams(){
+    const outdoor=parseFloat(document.getElementById('lgOutdoor').value);
+    const offset=parseFloat(document.getElementById('lgOffset').value);
+    this.outdoorTemp=Number.isFinite(outdoor)?outdoor:35;
+    const policy=document.getElementById('lgIncentive').value;
+    this.incentive=policy==='全部无激励'?'无激励':policy==='全部有激励'?'有激励':'按楼宇配置';
+    this.tempMode=document.getElementById('lgTempMode').value;
+    this.tempOffset=Number.isFinite(offset)?Math.max(0,offset):1;
+    this.render();
+  },
+  updateBuilding(id,key,value){
+    const b=BUILDINGS.find(x=>x.id===id);if(!b)return;
+    if(key==='incentive')b.incentive=value;else{const n=parseFloat(value);if(!Number.isFinite(n))return;b[key]=Math.max(0,n);if(key==='maxTempOffset')b.tempOffset=Math.min(b.tempOffset,b.maxTempOffset);if(key==='tempOffset')b.tempOffset=Math.min(b.tempOffset,b.maxTempOffset);}
+    BuildingConfigStore.save();this.render();
+  },
+  showDetail(id){
+    const b=BUILDINGS.find(x=>x.id===id);
+    if(!b)return;
+    const effectiveIncentive=this.incentive==='按楼宇配置'?b.incentive:this.incentive;
+    const offsetArg=this.tempMode==='building'?'按楼宇配置':this.tempOffset;
+    const r=PotentialEngine.calc(b,this.outdoorTemp,null,this.incentive,offsetArg);
+    const d=r.detail;
+    const modal=document.createElement('div');
+    modal.className='modal-overlay show';
+    modal.innerHTML=`<div class="modal" style="width:720px">
+      <h3>${b.name} · 可调潜力计算详情</h3>
+      <div class="info-box"><strong>计算模型：</strong>${d.model}<br><strong>核心公式：</strong>${d.formula}</div>
+      <h4 style="font-size:14px;margin:16px 0 10px;color:var(--accent-cyan)">输入参数</h4>
+      <table class="mini-tb">
+        <tr><th>参数</th><th>取值</th><th>说明</th></tr>
+        <tr><td>基准负荷 P</td><td>${b.baseLoad} kW</td><td>未调节时的运行功率</td></tr>
+        <tr><td>室外温度</td><td>${this.outdoorTemp}℃</td><td>当前工况</td></tr>
+        <tr><td>实测标杆</td><td>${b.sourcePotential} kW</td><td>统一台账中的已确认值</td></tr>
+        <tr><td>温度修正</td><td>${fmt(d.components.温度修正,3)}</td><td>以35–39℃工况为1.000</td></tr>
+        <tr><td>激励状态</td><td>${effectiveIncentive}</td><td>${this.incentive==='按楼宇配置'?'楼宇独立配置':'全局情景覆盖'}</td></tr>
+        <tr><td>α响应系数</td><td>${PotentialEngine.getAlpha(b.type,effectiveIncentive)}</td><td>${b.type}·${effectiveIncentive}，查表获得</td></tr>
+        <tr><td>温度上调幅度</td><td>${d.components.上调幅度}℃</td><td>不超过该楼宇 ${b.maxTempOffset}℃ 上限</td></tr>
+      </table>
+      <h4 style="font-size:14px;margin:16px 0 10px;color:var(--accent-cyan)">计算过程</h4>
+      <div class="formula-box">
+        ΔP = ${b.sourcePotential} × ${fmt(d.components.温度修正,3)} × ${fmt(d.components.响应修正,3)} × ${d.components.上调幅度} = ${fmt(r.potential,2)} kW
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
+        <div class="stat-card"><div class="stat-icon cyan">📊</div><div class="stat-value" style="font-size:20px">${fmt(r.potential,1)}</div><div class="stat-label">可调潜力 (kW)</div></div>
+        <div class="stat-card"><div class="stat-icon purple">%</div><div class="stat-value" style="font-size:20px">${r.potentialPct}%</div><div class="stat-label">占基准负荷比例</div></div>
+         <div class="stat-card"><div class="stat-icon ${r.capped?'red':'green'}">${r.capped?'⚠️':'✅'}</div><div class="stat-value" style="font-size:20px">${r.capped?'超限':'正常'}</div><div class="stat-label">安全上限 ${fmt(b.safeLimit,1)} kW</div></div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">关闭</button></div>
+    </div>`;
+    modal.onclick=e=>{if(e.target===modal)modal.remove();};
+    document.body.appendChild(modal);
+  },
+  exportCSV(){
+    const offsetArg=this.tempMode==='building'?'按楼宇配置':this.tempOffset;
+    const results=PotentialEngine.calcAll(BUILDINGS,this.outdoorTemp,null,this.incentive,offsetArg);
+    let csv='\ufeff序号,楼宇名称,业态,空调类型,区县,装机容量kW,基准负荷kW,实测标杆kW,安全上限kW,优先级,室外温度,当前设定温度,激励状态,最大允许上调,实际采用上调,情景潜力kW,可调比例,风险提示\n';
+    results.forEach((r,i)=>{
+      const b=BUILDINGS[i];
+      csv+=[b.id,b.name,b.type,b.acType,b.district,b.capacity,b.baseLoad,b.sourcePotential,b.safeLimit,b.priority,
+        this.outdoorTemp,b.setTemp,this.incentive==='按楼宇配置'?b.incentive:this.incentive,b.maxTempOffset,Math.min(this.tempMode==='building'?b.tempOffset:this.tempOffset,b.maxTempOffset),fmt(r.potential,2),r.potentialPct+'%',r.capped?'超安全上限':'正常'].join(',')+'\n';
+    });
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='楼宇可调潜力计算结果_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+    showToast('潜力计算结果已导出');
+  }
+};
+
+/* ============================================================
+   模块三：六类建筑策略库（可调用）
+============================================================ */
+const StrategyLib={
+  selectedBuilding:null,
+  render(){
+    const el=document.getElementById('page-stratlib');
+    const typeOrder=['党政机关','企事业单位','办公写字楼','商业综合体','商超','酒店'];
+    const typeIcons={'党政机关':'🏛️','企事业单位':'🏭','办公写字楼':'🏢','商业综合体':'🛍️','商超':'🛒','酒店':'🏨'};
+
+    el.innerHTML=`
+    <div class="page-header">
+      <div><h2>六类建筑三级策略库</h2><div class="breadcrumb">策略规则层 / 可调用策略库（编码：类别—系统—方式—等级）</div></div>
+    </div>
+
+    <div class="info-box">📚 <strong>策略库不是挂着看的，是被调用的。</strong>聚合调控和单体执行模块都会自动调用这里的策略匹配算法。下方也可以手动输入目标削减量，测试某栋楼会匹配到哪级策略。</div>
+
+    <div class="panel">
+      <div class="panel-header"><h3>策略匹配测试</h3><span style="font-size:11px;color:var(--text-muted)">输入目标削减量，查看匹配结果</span></div>
+      <div class="panel-body">
+        <div class="form-row">
+          <div class="form-group" style="min-width:250px"><label>选择楼宇</label>
+            <select class="form-select" id="slBuilding" onchange="StrategyLib.doMatch()">
+              <option value="">-- 请选择楼宇 --</option>
+              ${BUILDINGS.map(b=>`<option value="${b.id}">${b.name}（${b.type}·${b.acType}·${b.baseLoad}kW）</option>`).join('')}
+            </select></div>
+          <div class="form-group"><label>目标削减量 (kW)</label><input class="form-input" type="number" id="slTarget" value="100" onchange="StrategyLib.doMatch()"></div>
+          <div class="form-group"><label>室外温度 (℃)</label><input class="form-input" type="number" id="slOutdoor" value="35" onchange="StrategyLib.doMatch()"></div>
+          <div class="form-group"><label>激励政策</label><select class="form-select" id="slIncentive" onchange="StrategyLib.doMatch()"><option>无激励</option><option selected>有激励</option></select></div>
+        </div>
+        <div id="slMatchResult"></div>
+      </div>
+    </div>
+
+    <details class="calc-logic">
+      <summary>📘 策略匹配算法说明 <span class="calc-hint">点开查看匹配逻辑</span></summary>
+      <div class="calc-body">
+        <p><b>匹配原则（来自调控策略说明书4.2节）：</b>优先选择能够满足目标的最低等级策略，由Ⅰ级向Ⅱ级、Ⅲ级逐级调用。不在前一级尚未稳定时直接叠加下一主要控制变量。</p>
+        <div class="calc-step">匹配流程</div>
+        <p>① 按建筑类型和空调系统形式筛选策略分支<br>
+        ② 排除限制或禁止调控区域<br>
+        ③ 从Ⅰ级开始，计算该级能提供的实际削减量（潜力 × 参与区域比例）<br>
+        ④ 若满足目标则匹配该级；若不满足则升级至Ⅱ级、Ⅲ级<br>
+        ⑤ 三级都不满足时返回最高级 + 剩余缺口，由平台追加其他用户</p>
+        <div class="calc-step">策略编码规则</div>
+        <div class="formula-box">建筑类别(JG/QS/BG/SZ/SC/JD) − 系统形式(VRF/WC) − 调控方式(F/I) − 等级(L1/L2/L3)<br>例：JG-WC-F-L2 = 党政机关·水冷中央空调·Ⅱ级·柔性调节</div>
+      </div>
+    </details>
+
+    <div class="grid-2">
+      ${typeOrder.map(t=>{
+        const s=StrategyLibrary.STRATEGIES[t];
+        return `<div class="panel">
+          <div class="panel-header"><h3>${typeIcons[t]} ${t} <span class="badge badge-blue">${StrategyLibrary.TYPE_CODES[t]}</span></h3><span style="font-size:10px;color:var(--text-muted)">限制：${s.restricted}</span></div>
+          <div class="panel-body">
+            <table class="data-table">
+              <thead><tr><th>等级</th><th>策略名称</th><th>温度上调</th><th>参与区域</th><th>互动目标</th></tr></thead>
+              <tbody>
+                ${s.levels.map((lv,i)=>`<tr>
+                  <td><span class="badge ${i===0?'badge-blue':i===1?'badge-cyan':'badge-purple'}">${lv.code}</span></td>
+                  <td style="font-weight:600;text-align:left">${lv.name}</td>
+                  <td>${lv.tempOffset}℃</td>
+                  <td>${Math.round(lv.zoneFraction*100)}%</td>
+                  <td>${lv.interactiveTarget}%</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+            <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.6">${s.levels[0].desc}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><h3>调控等级通用定义</h3></div>
+      <div class="panel-body">
+        <table class="data-table">
+          <thead><tr><th>等级</th><th>策略定位</th><th>主要动作</th><th>调用要求</th><th>互动目标</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-blue">Ⅰ级</span></td><td>轻量响应</td><td>小范围末端温度提高1℃</td><td>优先调用，完成一个响应周期后校核</td><td>10%</td></tr>
+            <tr><td><span class="badge badge-cyan">Ⅱ级</span></td><td>常规削峰</td><td>扩大参与区域或分区轮调；水冷可提高供水温度1℃</td><td>Ⅰ级不足且设备、环境正常时调用</td><td>15%</td></tr>
+            <tr><td><span class="badge badge-purple">Ⅲ级</span></td><td>受限深度响应</td><td>在已验证范围内继续扩大调节</td><td>仅在高负荷需求和严格边界条件下调用</td><td>20%</td></tr>
+          </tbody>
+        </table>
+        <div class="info-box warning" style="margin-top:14px">⚠️ 策略等级表示调控动作的深度和参与范围，<strong>不等同于固定削减率</strong>。27~28℃仅用于经现场确认可接受的短时工况；水冷冷冻水供水温度常规执行 7→8→9℃，10℃仅适用于已完成验证的具体工况。末端设定温度与冷冻水供水温度原则上不同时改变。</div>
+      </div>
+    </div>`;
+  },
+  doMatch(){
+    const bid=parseInt(document.getElementById('slBuilding').value);
+    const target=parseFloat(document.getElementById('slTarget').value)||100;
+    const outdoor=parseFloat(document.getElementById('slOutdoor').value)||35;
+    const inc=document.getElementById('slIncentive').value;
+    const resultDiv=document.getElementById('slMatchResult');
+    if(!bid){resultDiv.innerHTML='';return;}
+    const b=assignment;
+    const m=StrategyLibrary.match(b,target,outdoor,inc);
+    resultDiv.innerHTML=`
+    <div class="info-box green" style="margin-top:16px">
+      <strong>匹配结果：</strong>${m.matchedLevel===1?'Ⅰ级':m.matchedLevel===2?'Ⅱ级':'Ⅲ级'}策略 · ${m.matchedLevelName}<br>
+      <strong>策略编码：</strong>${m.strategyCode}　<strong>实际可调：</strong>${m.actualAdjustable} kW　<strong>剩余缺口：</strong>${m.remainingGap} kW　${m.meetsTarget?'<span class="badge badge-green">满足目标</span>':'<span class="badge badge-red">不满足，需追加</span>'}
+    </div>
+    <table class="data-table" style="margin-top:12px">
+      <thead><tr><th>等级</th><th>策略名称</th><th>潜力(kW)</th><th>参与区域</th><th>实际可调(kW)</th><th>是否满足目标</th></tr></thead>
+      <tbody>${m.allLevels.map((lv,i)=>`<tr ${lv.level===m.matchedLevel?'style="background:rgba(59,130,246,.1)"':''}>
+        <td><span class="badge ${i===0?'badge-blue':i===1?'badge-cyan':'badge-purple'}">${lv.code}</span></td>
+        <td style="font-weight:600">${lv.name}${lv.level===m.matchedLevel?' ✓':''}</td>
+        <td>${fmt(lv.potential,1)}</td>
+        <td>${Math.round(lv.zoneFraction*100)}%</td>
+        <td style="font-weight:700;color:var(--accent-cyan)">${fmt(lv.actualAdjustable,1)}</td>
+        <td>${lv.meetsTarget?'<span class="badge badge-green">满足</span>':'<span class="badge badge-yellow">不足</span>'}</td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  }
+};
+
+/* ============================================================
+   模块四：楼宇协同联动策略
+   调控任务 → 能力与约束 → 初次分配与协同承接 → 执行闭环
+============================================================ */
+const ConsistencyCheck={
+  results(){
+    const sample=DATA_PROFILE.validate();
+    const sampleLimits=BUILDINGS.every(b=>b.sourcePotential>=0&&b.sourcePotential<=b.baseLoad+0.01);
+    const city=CityPotential.standardCheck();
+    if(!DistrictAlloc.districts.length)DistrictAlloc.compute();
+    const cityTotal=CityPotential.mw(CityPotential.totals().neutral);
+    const districtPotential=DistrictAlloc.districts.reduce((s,d)=>s+d.potential,0);
+    const cityDispatch=CityPotential.mw(CityPotential.totals().dispatch20);
+    const districtTarget=parseFloat(DistrictAlloc.params['全域削峰总目标'].value)||0;
+    const parent=DistrictAlloc.districts.find(d=>d.name===Aggregate.selectedDistrict);
+    const parentTarget=parent?.final_target||0;
+    const aggregateTarget=Aggregate.synergySummary.target/1000;
+    const conservation=Math.abs(Aggregate.synergySummary.final+Aggregate.synergySummary.gap-Aggregate.synergySummary.target)<0.1;
+    const safe=Aggregate.synergyBuildings.every(b=>b.final_target<=b.safety_limit+0.01&&b.potential<=b.baseLoad+0.01);
+    const runs=Object.entries(Aggregate.executionResults);
+    const runValid=runs.every(([id,r])=>{const b=Aggregate.synergyBuildings.find(x=>x.id===Number(id));return b&&Number.isFinite(r.actualReduction)&&r.actualReduction<=b.final_target+0.51&&Math.abs(r.gap-Math.max(0,b.final_target-r.actualReduction))<0.51;});
+    return[
+      {name:'样本数据口径',status:sample.pass&&sampleLimits?'pass':'fail',detail:sample.pass&&sampleLimits?'61户数量、基准负荷与潜力合计一致':'样本汇总或“潜力≤基准负荷”检查异常'},
+      {name:'全市 → 区县',status:Math.abs(cityTotal-districtPotential)<0.1&&Math.abs(cityDispatch-districtTarget)<0.11&&city.pass?'pass':'fail',detail:`中性潜力 ${fmt(cityTotal,1)} MW；下发目标 ${fmt(districtTarget,1)} MW`},
+      {name:'区县 → 楼宇',status:parent&&Math.abs(aggregateTarget-parentTarget)<0.001&&conservation?'pass':'fail',detail:parent?`${Aggregate.selectedDistrict}任务 ${fmt(parentTarget,2)} MW = 楼宇执行 ${fmt(Aggregate.synergySummary.final/1000,2)} MW + 缺口 ${fmt(Aggregate.synergySummary.gap/1000,2)} MW`:'未匹配到区县任务'},
+      {name:'楼宇能力边界',status:safe?'pass':'fail',detail:safe?`${Aggregate.synergyBuildings.length}栋最终任务均未超过稳定能力安全上限`:'存在楼宇任务超过稳定能力或基准负荷'},
+      {name:'单体仿真回写',status:!runs.length?'pending':runValid?'pass':'fail',detail:!runs.length?'尚未执行单体仿真':runValid?`已校验 ${runs.length}/${Aggregate.synergyBuildings.length} 栋，削减量与缺口关系正确`:'单体仿真结果与分配任务不一致'}
+    ];
+  },
+  render(){
+    const rows=this.results();
+    const abnormal=rows.filter(r=>r.status==='fail').length;
+    const icon={pass:'✓',pending:'…',fail:'!'},badge={pass:'badge-green',pending:'badge-yellow',fail:'badge-red'},label={pass:'通过',pending:'待校验',fail:'异常'};
+    return `<details class="calc-logic" open><summary>✅ 全链路一致性校验 <span class="calc-hint">${abnormal?abnormal+' 项异常':'当前口径正常'} · 参数变化后自动更新</span></summary><div class="calc-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>校验环节</th><th>状态</th><th>校验结果</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="text-align:left;font-weight:600">${r.name}</td><td><span class="badge ${badge[r.status]}">${icon[r.status]} ${label[r.status]}</span></td><td style="text-align:left">${r.detail}</td></tr>`).join('')}</tbody></table></div></div></details>`;
+  }
+};
+
+const Aggregate={
+  tab:'task',
+  selectedDistrict:'江北区',
+  selectedBuildingId:null,
+  executionResults:{},
+  synergyParams:{
+    '任务允许偏差':{value:0.02,unit:'-',desc:'实际削减量处于目标±2%时判定达标'},
+    '单楼宇安全利用比例':{value:0.95,unit:'-',desc:'计划任务不超过该楼宇稳定能力的95%'},
+    '协同承接安全系数':{value:0.8,unit:'-',desc:'楼宇最多使用80%的剩余安全空间承接缺口'},
+    '一级优先调节权重':{value:1.0,unit:'-',desc:'写字楼、商业综合体'},
+    '二级辅助调节权重':{value:0.7,unit:'-',desc:'酒店、商超'},
+    '三级保障调节权重':{value:0.3,unit:'-',desc:'政务、企事业单位、医院'}
+  },
+  DEFAULT_SYNERGY_BUILDINGS:[
+    {id:1001,name:'观音桥大融城',district:'江北区',category:'商业综合体',priority:'一级',acType:'冷水机组',potential:1020,period:'13:00-15:00',benchmarkId:35},
+    {id:1002,name:'北城天街购物广场',district:'江北区',category:'商业综合体',priority:'一级',acType:'冷水机组',potential:880,period:'13:00-15:00'},
+    {id:1003,name:'龙湖星悦荟',district:'江北区',category:'商业综合体',priority:'一级',acType:'冷水机组',potential:762,period:'13:00-15:00'},
+    {id:1004,name:'协信中心写字楼',district:'江北区',category:'办公写字楼',priority:'一级',acType:'冷水机组',potential:720,period:'11:00-13:00'},
+    {id:1005,name:'观音桥COSMO写字楼',district:'江北区',category:'办公写字楼',priority:'一级',acType:'多联机',potential:456,period:'11:00-13:00'},
+    {id:1006,name:'北仓文创园商业',district:'江北区',category:'商业综合体',priority:'一级',acType:'多联机',potential:320,period:'11:00-13:00'},
+    {id:1007,name:'重庆尼依格罗酒店',district:'江北区',category:'酒店',priority:'二级',acType:'多联机',potential:660,period:'11:00-13:00'},
+    {id:1008,name:'观音桥新世纪百货',district:'江北区',category:'商超',priority:'二级',acType:'冷水机组',potential:420,period:'11:00-13:00'},
+    {id:1009,name:'全季酒店观音桥店',district:'江北区',category:'酒店',priority:'二级',acType:'多联机',potential:221,period:'11:00-13:00'},
+    {id:1010,name:'永辉超市观音桥店',district:'江北区',category:'商超',priority:'二级',acType:'多联机',potential:140,period:'11:00-13:00'},
+    {id:1011,name:'家乐福金观音店',district:'江北区',category:'商超',priority:'二级',acType:'多联机',potential:100,period:'11:00-13:00'},
+    {id:1012,name:'盒马鲜生九街店',district:'江北区',category:'商超',priority:'二级',acType:'多联机',potential:100,period:'11:00-13:00'},
+    {id:1013,name:'江北区政府大楼',district:'江北区',category:'党政机关',priority:'三级',acType:'冷水机组',potential:211.6,period:'15:00-17:00'},
+    {id:1014,name:'江北区中医院',district:'江北区',category:'企事业单位',priority:'三级',acType:'多联机',potential:100,period:'15:00-17:00'}
+  ],
+  buildingStoreKey:'ac-v3-synergy-buildings',
+  sourceList:null,
+  editingId:null,
+  managerOpen:false,
+  lastImportMessage:'',
+  pendingImport:null,
+  synergyBuildings:[],
+  synergyInited:false,
+  getPriorityWeight(priority){
+    if(priority==='一级')return this.synergyParams['一级优先调节权重'].value;
+    if(priority==='二级')return this.synergyParams['二级辅助调节权重'].value;
+    return this.synergyParams['三级保障调节权重'].value;
+  },
+  sourceBuildings(){
+    if(this.sourceList)return this.sourceList;
+    try{const saved=JSON.parse(localStorage.getItem(this.buildingStoreKey)||'null');if(Array.isArray(saved)&&saved.length)this.sourceList=saved;}catch(e){}
+    if(!this.sourceList)this.sourceList=this.DEFAULT_SYNERGY_BUILDINGS.map(b=>({...b}));
+    return this.sourceList;
+  },
+  saveBuildings(){try{localStorage.setItem(this.buildingStoreKey,JSON.stringify(this.sourceList));}catch(e){showToast('楼宇清单保存失败');}},
+  districtTask(){DistrictAlloc.compute();return DistrictAlloc.districts.find(d=>d.name===this.selectedDistrict)?.final_target||0;},
+  setDistrict(name){this.selectedDistrict=name;this.executionResults={};this.selectedBuildingId=null;this.computeSynergy();this.render();},
+  computeSynergy(){
+    const P={};
+    Object.keys(this.synergyParams).forEach(k=>{P[k]=parseFloat(this.synergyParams[k].value)||0;});
+    const totalTargetKW=this.districtTask()*1000;
+    const maxRatio=P['单楼宇安全利用比例'];
+    const mutualSafety=P['协同承接安全系数'];
+
+    this.synergyBuildings=this.sourceBuildings().filter(b=>b.available!==false&&b.district===this.selectedDistrict).map((b,index)=>{
+      const weight=this.getPriorityWeight(b.priority);
+      const calibratedPotential=b.potential;
+      const weightedPot=calibratedPotential*weight;
+      const benchmark=(b.benchmarkId&&BUILDINGS.find(x=>x.id===b.benchmarkId))||BUILDINGS.find(x=>x.type===b.category&&(x.acType===b.acType||x.acType.includes(b.acType)||b.acType.includes(x.acType)))||BUILDINGS.find(x=>x.type===b.category);
+      const scale=benchmark?.sourcePotential?calibratedPotential/benchmark.sourcePotential:1;
+      const responseMin=b.acType.includes('多联机')&&!b.acType.includes('冷水机组')?5:15;
+      const constraint=b.category==='商业综合体'?'避让餐饮、影院、儿童区和大型活动':b.category==='商超'?'避让冷链、生鲜及熟食区域':b.category==='酒店'?'避让在用客房、会议宴会和重要接待':b.category==='党政机关'?'避让机房、会议和政务窗口':b.category==='企事业单位'?'避让工艺、实验及连续保障区域':'避让敏感租户和重点区域';
+      return{...b,seq:index+1,type:b.category,potential:calibratedPotential,sourcePotential:calibratedPotential,baseLoad:b.baseLoad||(benchmark?.baseLoad||calibratedPotential*5)*scale,capacity:b.capacity||(benchmark?.capacity||calibratedPotential*7)*scale,safeLimit:calibratedPotential,setTemp:b.setTemp??benchmark?.setTemp??26,incentive:b.incentive||benchmark?.incentive||'有激励',tempOffset:b.tempOffset??b.maxTempOffset??benchmark?.tempOffset??1,maxTempOffset:b.maxTempOffset??benchmark?.maxTempOffset??1,available:b.available!==false,weight,weightedPot,responseMin,constraint,eligible:b.available!==false,checkStatus:b.available===false?'当前不可用':'具备调控条件',dataSource:b.custom?'用户录入/Excel导入':b.benchmarkId?'61户实测对象校准':'61户同类样本标杆估算',calibrationName:benchmark?.name||'同类样本'};
+    });
+    const totalWeighted=this.synergyBuildings.reduce((s,b)=>s+b.weightedPot,0);
+    this.synergyBuildings.forEach(b=>{
+      b.initial_target=totalWeighted>0?(b.weightedPot/totalWeighted)*totalTargetKW:0;
+      b.safety_limit=b.potential*maxRatio;
+      b.initial_executable=Math.min(b.initial_target,b.safety_limit);
+      b.transfer_out=Math.max(0,b.initial_target-b.initial_executable);
+      b.remaining_space=Math.max(0,b.safety_limit-b.initial_executable);
+      b.accepted=0;
+    });
+    const totalDeficit=this.synergyBuildings.reduce((s,b)=>s+b.transfer_out,0);
+    const donors=this.synergyBuildings.filter(b=>b.remaining_space>0.005);
+    const totalSafeSpace=donors.reduce((s,b)=>s+b.remaining_space*mutualSafety,0);
+    const availableAid=Math.min(totalDeficit,totalSafeSpace);
+    donors.forEach(b=>{b.accepted=totalSafeSpace>0?availableAid*(b.remaining_space*mutualSafety/totalSafeSpace):0;});
+    this.synergyBuildings.forEach(b=>{
+      b.final_target=b.initial_executable+b.accepted;
+      b.adjustment=b.final_target-b.initial_target;
+      b.final_util=b.safety_limit>0?b.final_target/b.safety_limit:0;
+      b.final_compliance=b.final_util<=1.0?'合规':'超限';
+      b.strategyLevel='Ⅰ级';
+    });
+    const final=this.synergyBuildings.reduce((s,b)=>s+b.final_target,0);
+    if(this.synergySummary&&Math.abs(this.synergySummary.target-totalTargetKW)>0.01)this.executionResults={};
+    this.synergySummary={target:totalTargetKW,initial:this.synergyBuildings.reduce((s,b)=>s+b.initial_executable,0),transferred:availableAid,final,gap:Math.max(0,totalTargetKW-final)};
+  },
+  render(){
+    const el=document.getElementById('page-aggregate');
+    this.computeSynergy();this.synergyInited=true;
+    el.innerHTML=`
+    <div class="page-header">
+      <div><h2>楼宇协同与策略执行</h2><div class="breadcrumb">调控执行层 / 协同分配 → 单体策略 → 结果回写</div></div>
+      <button class="btn btn-outline btn-sm" onclick="Aggregate.exportAll()" id="agExportBtn">📥 导出</button>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn ${this.tab==='task'?'active':''}" onclick="Aggregate.switchTab('task')">1　调控任务</button>
+      <button class="tab-btn ${this.tab==='allocation'?'active':''}" onclick="Aggregate.switchTab('allocation')">2　楼宇分配</button>
+      <button class="tab-btn ${this.tab==='detail'?'active':''}" onclick="Aggregate.switchTab('detail')">3　单体执行详情</button>
+    </div>
+    <div id="agTabBody"></div>`;
+    this.renderTab();
+  },
+  switchTab(t){this.tab=t;this.render();},
+  renderTab(){
+    const body=document.getElementById('agTabBody');
+    if(!body)return;
+    if(this.tab==='task'){this.renderTask(body);}
+    else if(this.tab==='allocation'){this.renderAllocation(body);}
+    else if(this.tab==='detail'){SingleCtrl.render('agTabBody',true);}
+  },
+  openDetail(id){this.selectedBuildingId=id;SingleCtrl.selectedBuildingId=id;this.tab='detail';this.render();},
+  cleanText(v){return String(v??'').trim().replace(/[<>&"']/g,'')},
+  field(id){return document.getElementById(id)?.value??''},
+  renderManager(){
+    const all=this.sourceBuildings(),raw=all.find(b=>b.id===this.editingId),edit=raw?{...(this.synergyBuildings.find(b=>b.id===raw.id)||{}),...raw}:{};
+    const option=(value,current)=>`<option ${value===current?'selected':''}>${value}</option>`;
+    return `<details class="calc-logic" ${this.managerOpen?'open':''}><summary>🏢 楼宇清单维护 <span class="calc-hint">当前 ${all.length} 栋，可手动维护或导入Excel</span></summary><div class="calc-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn btn-primary btn-sm" onclick="Aggregate.editBuilding(null)">＋ 新增楼宇</button><button class="btn btn-outline btn-sm" onclick="document.getElementById('agExcelFile').click()">📥 导入Excel</button><a class="btn btn-outline btn-sm" href="assets/楼宇导入模板.xlsx" download>📄 下载Excel模板</a><button class="btn btn-outline btn-sm" onclick="Aggregate.resetBuildings()">↺ 恢复14栋示例</button><input id="agExcelFile" type="file" accept=".xlsx" style="display:none" onchange="Aggregate.importExcel(this)"></div>
+      ${this.lastImportMessage?`<div class="info-box">${esc(this.lastImportMessage)}</div>`:''}
+      ${this.renderImportPreview()}
+      <div class="panel"><div class="panel-header"><h3>${edit.id?'编辑楼宇':'新增楼宇'}</h3><span style="font-size:11px;color:var(--text-muted)">同名保存将更新原记录</span></div><div class="panel-body"><div class="form-row">
+        <input type="hidden" id="bmId" value="${edit.id||''}">
+        <div class="form-group"><label>楼宇名称*</label><input class="form-input" id="bmName" value="${esc(edit.name||'')}"></div>
+        <div class="form-group"><label>区县*</label><input class="form-input" id="bmDistrict" value="${esc(edit.district||this.selectedDistrict)}"></div>
+        <div class="form-group"><label>业态*</label><select class="form-select" id="bmCategory">${['党政机关','企事业单位','办公写字楼','商业综合体','酒店','商超'].map(v=>option(v,edit.category||'办公写字楼')).join('')}</select></div>
+        <div class="form-group"><label>空调类型*</label><select class="form-select" id="bmAcType">${['冷水机组','多联机','冷水机组 + 多联机'].map(v=>option(v,edit.acType||'冷水机组')).join('')}</select></div>
+        <div class="form-group"><label>优先级*</label><select class="form-select" id="bmPriority">${['一级','二级','三级'].map(v=>option(v,edit.priority||'一级')).join('')}</select></div>
+        <div class="form-group"><label>稳定能力(kW)*</label><input class="form-input" type="number" min="0" id="bmPotential" value="${edit.potential??''}"></div>
+        <div class="form-group"><label>基准负荷(kW)*</label><input class="form-input" type="number" min="0" id="bmBaseLoad" value="${edit.baseLoad??''}"></div>
+        <div class="form-group"><label>额定容量(kW)*</label><input class="form-input" type="number" min="0" id="bmCapacity" value="${edit.capacity??''}"></div>
+        <div class="form-group"><label>设定温度(℃)*</label><input class="form-input" type="number" min="20" max="30" step="0.5" id="bmSetTemp" value="${edit.setTemp??26}"></div>
+        <div class="form-group"><label>最大上调(℃)*</label><input class="form-input" type="number" min="0" max="5" step="0.5" id="bmMaxOffset" value="${edit.maxTempOffset??1}"></div>
+        <div class="form-group"><label>激励状态*</label><select class="form-select" id="bmIncentive">${['有激励','无激励'].map(v=>option(v,edit.incentive||'有激励')).join('')}</select></div>
+        <div class="form-group"><label>可调时段*</label><input class="form-input" id="bmPeriod" value="${esc(edit.period||'13:00-15:00')}"></div>
+        <div class="form-group"><label>是否可用*</label><select class="form-select" id="bmAvailable">${['是','否'].map(v=>option(v,edit.available===false?'否':'是')).join('')}</select></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;gap:8px"><button class="btn btn-primary" onclick="Aggregate.saveBuildingForm()">保存</button>${edit.id?'<button class="btn btn-outline" onclick="Aggregate.editBuilding(null)">取消</button>':''}</div>
+      </div></div></div>
+      <div class="data-table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>楼宇名称</th><th>区县</th><th>业态</th><th>空调类型</th><th>优先级</th><th>稳定能力(kW)</th><th>状态</th><th>操作</th></tr></thead><tbody>${all.map((b,i)=>`<tr><td>${i+1}</td><td style="text-align:left"><strong>${esc(b.name)}</strong></td><td>${esc(b.district)}</td><td>${esc(b.category)}</td><td>${esc(b.acType)}</td><td>${b.priority}</td><td>${fmt(b.potential,1)}</td><td><span class="badge ${b.available===false?'badge-red':'badge-green'}">${b.available===false?'不可用':'可用'}</span></td><td><button class="btn btn-outline btn-sm" onclick="Aggregate.editBuilding(${b.id})">编辑</button> <button class="btn btn-danger btn-sm" onclick="Aggregate.deleteBuilding(${b.id})">删除</button></td></tr>`).join('')}</tbody></table></div>
+    </div></details>`;
+  },
+  editBuilding(id){this.editingId=id;this.managerOpen=true;this.renderTask(document.getElementById('agTabBody'));},
+  validateBuilding(b){
+    const types=['党政机关','企事业单位','办公写字楼','商业综合体','酒店','商超'],acs=['冷水机组','多联机','冷水机组 + 多联机'];
+    if(!b.name||!b.district)return '楼宇名称和区县不能为空';
+    if(!types.includes(b.category)||!acs.includes(b.acType)||!['一级','二级','三级'].includes(b.priority))return '业态、空调类型或优先级不符合模板选项';
+    if(!(b.potential>0&&b.baseLoad>0&&b.capacity>0))return '稳定能力、基准负荷和额定容量必须大于0';
+    if(b.potential>b.baseLoad)return '稳定可调能力不能超过基准负荷';
+    if(!(b.setTemp>=20&&b.setTemp<=30&&b.maxTempOffset>0&&b.maxTempOffset<=5))return '设定温度或最大上调温度超出允许范围';
+    if(!['有激励','无激励'].includes(b.incentive)||!b.period)return '激励状态或可调时段无效';
+    return '';
+  },
+  saveBuildingForm(){
+    const b={id:Number(this.field('bmId'))||0,name:this.cleanText(this.field('bmName')),district:this.cleanText(this.field('bmDistrict')),category:this.field('bmCategory'),acType:this.field('bmAcType'),priority:this.field('bmPriority'),potential:Number(this.field('bmPotential')),baseLoad:Number(this.field('bmBaseLoad')),capacity:Number(this.field('bmCapacity')),setTemp:Number(this.field('bmSetTemp')),maxTempOffset:Number(this.field('bmMaxOffset')),tempOffset:Number(this.field('bmMaxOffset')),incentive:this.field('bmIncentive'),period:this.cleanText(this.field('bmPeriod')),available:this.field('bmAvailable')!=='否',custom:true};
+    const error=this.validateBuilding(b);if(error){showToast(error);return;}
+    const same=this.sourceList.find(x=>x.name===b.name&&x.id!==b.id);
+    const index=this.sourceList.findIndex(x=>x.id===(same?.id||b.id));
+    if(index>=0){b.id=this.sourceList[index].id;this.sourceList[index]=b;}else{b.id=Math.max(1000,...this.sourceList.map(x=>Number(x.id)||0))+1;this.sourceList.push(b);}
+    this.editingId=null;this.executionResults={};this.saveBuildings();this.computeSynergy();this.renderTask(document.getElementById('agTabBody'));showToast(`楼宇已保存：${b.name}`);
+  },
+  deleteBuilding(id){
+    const b=this.sourceList.find(x=>x.id===id);if(!b||!confirm(`确定删除“${b.name}”吗？`))return;
+    this.sourceList=this.sourceList.filter(x=>x.id!==id);delete this.executionResults[id];this.saveBuildings();this.computeSynergy();this.renderTask(document.getElementById('agTabBody'));showToast('楼宇已删除');
+  },
+  resetBuildings(){
+    if(!confirm('确定清除自定义楼宇并恢复最初14栋示例吗？'))return;
+    this.sourceList=this.DEFAULT_SYNERGY_BUILDINGS.map(b=>({...b}));this.executionResults={};this.editingId=null;this.lastImportMessage='已恢复最初14栋示例';this.saveBuildings();this.computeSynergy();this.renderTask(document.getElementById('agTabBody'));
+  },
+  async readXlsx(file){
+    if(typeof JSZip==='undefined')throw new Error('Excel解析组件未加载');
+    const zip=await JSZip.loadAsync(await file.arrayBuffer());
+    const xml=async path=>{const entry=zip.file(path);if(!entry)throw new Error(`Excel缺少文件：${path}`);return new DOMParser().parseFromString(await entry.async('text'),'application/xml')};
+    const workbook=await xml('xl/workbook.xml'),rels=await xml('xl/_rels/workbook.xml.rels');
+    const first=workbook.getElementsByTagName('sheet')[0];if(!first)throw new Error('Excel中没有工作表');
+    const rid=first.getAttribute('r:id')||first.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+    const rel=[...rels.getElementsByTagName('Relationship')].find(r=>r.getAttribute('Id')===rid);
+    let target=rel?.getAttribute('Target')||'worksheets/sheet1.xml';target=target.replace(/^\//,'').replace(/^xl\//,'');
+    const sheet=await xml('xl/'+target);
+    let shared=[];if(zip.file('xl/sharedStrings.xml')){const s=await xml('xl/sharedStrings.xml');shared=[...s.getElementsByTagName('si')].map(x=>x.textContent||'');}
+    const rows=[];
+    [...sheet.getElementsByTagName('row')].forEach(row=>{
+      const out=[];[...row.getElementsByTagName('c')].forEach(c=>{
+        const ref=c.getAttribute('r')||'A1',letters=(ref.match(/[A-Z]+/)||['A'])[0];let col=0;for(const ch of letters)col=col*26+ch.charCodeAt(0)-64;col--;
+        const type=c.getAttribute('t'),v=c.getElementsByTagName('v')[0]?.textContent??c.getElementsByTagName('is')[0]?.textContent??'';
+        out[col]=type==='s'?shared[Number(v)]??'':type==='b'?v==='1':v;
+      });rows.push(out);
+    });
+    return rows;
+  },
+  fromImportRows(rows){
+    const norm=v=>String(v??'').replace(/[\s*＊]/g,'').replace(/[（）]/g,c=>c==='（'?'(':')').toLowerCase();
+    const headerIndex=rows.findIndex(r=>r.some(v=>norm(v).startsWith('楼宇名称')));if(headerIndex<0)throw new Error('未找到“楼宇名称”表头，请使用系统模板');
+    const headers=rows[headerIndex].map(norm),get=(row,label)=>{const i=headers.findIndex(h=>h.startsWith(norm(label)));return i>=0?row[i]:'';};
+    const parsed=[],errors=[];
+    rows.slice(headerIndex+1).forEach((row,i)=>{
+      if(!row.some(v=>String(v??'').trim()))return;
+      const acRaw=this.cleanText(get(row,'空调类型')).replace('＋','+');
+      const acType=acRaw.includes('冷水机组')&&acRaw.includes('多联机')?'冷水机组 + 多联机':acRaw;
+      const b={id:Number(get(row,'楼宇编号'))||0,name:this.cleanText(get(row,'楼宇名称')),district:this.cleanText(get(row,'区县')),category:this.cleanText(get(row,'业态')),acType,priority:this.cleanText(get(row,'优先级')),potential:Number(get(row,'稳定可调能力')),baseLoad:Number(get(row,'基准负荷')),capacity:Number(get(row,'空调额定容量')),setTemp:Number(get(row,'室内设定温度')),maxTempOffset:Number(get(row,'最大上调温度')),incentive:this.cleanText(get(row,'激励状态')),period:this.cleanText(get(row,'可调时段')),available:!['否','0','false'].includes(String(get(row,'是否可用')).trim().toLowerCase()),custom:true};
+      b.tempOffset=b.maxTempOffset;
+      const rowNumber=headerIndex+i+2,error=this.validateBuilding(b);if(error)errors.push({row:rowNumber,name:b.name||'(空)',reason:error});else parsed.push({...b,importRow:rowNumber});
+    });
+    return{parsed,errors};
+  },
+  renderImportPreview(){const p=this.pendingImport;if(!p)return'';return `<div class="panel" style="margin-bottom:14px"><div class="panel-header"><h3>导入预览：${esc(p.fileName)}</h3><span class="badge ${p.errors.length?'badge-orange':'badge-green'}">可导入 ${p.parsed.length} 行 · 错误 ${p.errors.length} 行</span></div><div class="panel-body"><div class="info-box">尚未写入楼宇清单。请先核对新增、更新和错误行，确认后再导入。</div><div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="Aggregate.confirmImport()" ${p.parsed.length?'':'disabled'}>确认导入 ${p.parsed.length} 行</button><button class="btn btn-outline btn-sm" onclick="Aggregate.cancelImport()">取消</button>${p.errors.length?'<button class="btn btn-outline btn-sm" onclick="Aggregate.exportImportErrors()">导出错误清单</button>':''}</div><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>行号</th><th>楼宇名称</th><th>区县</th><th>业态</th><th>处理方式</th><th>校验结果</th></tr></thead><tbody>${p.parsed.slice(0,50).map(b=>`<tr><td>${b.importRow}</td><td style="text-align:left">${esc(b.name)}</td><td>${esc(b.district)}</td><td>${esc(b.category)}</td><td>${this.sourceBuildings().some(x=>x.name===b.name)?'更新同名楼宇':'新增楼宇'}</td><td><span class="badge badge-green">通过</span></td></tr>`).join('')}${p.errors.slice(0,50).map(e=>`<tr><td>${e.row}</td><td style="text-align:left">${esc(e.name)}</td><td>-</td><td>-</td><td>不导入</td><td><span class="badge badge-red">${esc(e.reason)}</span></td></tr>`).join('')}</tbody></table></div>${p.parsed.length+p.errors.length>50?'<div class="calc-note">预览仅显示前50行，确认导入会处理全部通过校验的数据。</div>':''}</div></div>`;},
+  async importExcel(input){
+    const file=input.files?.[0];if(!file)return;
+    try{
+      const result=this.fromImportRows(await this.readXlsx(file));if(!result.parsed.length&&!result.errors.length)throw new Error('Excel中没有可识别的楼宇数据');
+      this.pendingImport={...result,fileName:file.name};this.lastImportMessage='文件解析完成，请核对预览后确认导入';this.managerOpen=true;this.renderTask(document.getElementById('agTabBody'));
+    }catch(e){this.lastImportMessage=`导入失败：${e.message}`;this.managerOpen=true;this.renderTask(document.getElementById('agTabBody'));showToast(this.lastImportMessage);}finally{input.value='';}
+  },
+  confirmImport(){const p=this.pendingImport;if(!p||!p.parsed.length)return;let added=0,updated=0;p.parsed.forEach(raw=>{const b={...raw};delete b.importRow;const index=this.sourceList.findIndex(x=>x.name===b.name);if(index>=0){b.id=this.sourceList[index].id;this.sourceList[index]=b;updated++;}else{const requested=b.id&&!this.sourceList.some(x=>x.id===b.id)?b.id:0;b.id=requested||Math.max(1000,...this.sourceList.map(x=>Number(x.id)||0))+1;this.sourceList.push(b);added++;}});const skipped=p.errors.length;this.pendingImport=null;this.executionResults={};this.saveBuildings();this.computeSynergy();this.lastImportMessage=`导入完成：新增 ${added} 栋，更新 ${updated} 栋${skipped?`，错误 ${skipped} 行未导入`:''}`;this.renderTask(document.getElementById('agTabBody'));showToast(this.lastImportMessage);},
+  cancelImport(){this.pendingImport=null;this.lastImportMessage='已取消本次导入，楼宇清单未发生变化';this.renderTask(document.getElementById('agTabBody'));},
+  exportImportErrors(){const rows=this.pendingImport?.errors||[];if(!rows.length)return;let csv='\ufeffExcel行号,楼宇名称,错误原因\n'+rows.map(e=>[e.row,e.name,e.reason].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='楼宇导入错误清单_'+new Date().toISOString().slice(0,10)+'.csv';a.click();},
+  renderTask(body){
+    const districtOptions=DistrictAlloc.districts.map(d=>`<option ${d.name===this.selectedDistrict?'selected':''}>${d.name}</option>`).join('');
+    body.innerHTML=`<div class="panel"><div class="panel-header"><h3>区县任务来源</h3><span class="badge badge-green">严格联动</span></div><div class="panel-body"><div class="form-row"><div class="form-group"><label>执行区县</label><select class="form-select" onchange="Aggregate.setDistrict(this.value)">${districtOptions}</select></div><div class="form-group"><label>区县最终任务 (MW)</label><input class="form-input" value="${fmt(this.synergySummary.target/1000,3)}" readonly></div><div class="form-group"><label>采用方案</label><input class="form-input" value="${DistrictAlloc.selectedScheme==='second'?'全域二次下发':'分区轮调互济'}" readonly></div><div class="form-group"><label>可用楼宇</label><input class="form-input" value="${this.synergyBuildings.length} 栋" readonly></div></div></div></div>${this.renderManager()}${ConsistencyCheck.render()}<div class="info-box"><strong>数据口径：</strong>当前只调用 ${this.selectedDistrict} 的 ${this.synergyBuildings.length} 栋可用楼宇；没有楼宇数据时区县任务全部保留为缺口。</div><div class="info-box"><strong>参与方式：</strong>冷水机组和多联机均参与协同分配，平台只下达目标；温度、冷冻水和设备动作由对应单体策略决定。</div><div class="panel"><div class="panel-header"><h3>分配参数</h3><span style="font-size:11px;color:var(--text-muted)">${this.synergyBuildings.length}栋可用楼宇 · 共${Object.keys(this.synergyParams).length}项参数</span></div>
+      <div class="panel-body"><div class="param-grid">${Object.keys(this.synergyParams).map(k=>`
+        <div class="param-card"><h3>${k}</h3>
+          <div class="value-row"><input type="number" step="0.001" value="${this.synergyParams[k].value}" data-synergy-param="${k}" onchange="Aggregate.setSynergyParam(this)"><span class="unit">${this.synergyParams[k].unit}</span></div>
+          <div class="desc">${this.synergyParams[k].desc}</div></div>`).join('')}</div></div></div>`;
+  },
+  renderAllocation(body){
+    const s=this.synergySummary;
+    const executedCount=Object.keys(this.executionResults).length;
+    body.innerHTML=`<div class="stats-grid" style="grid-template-columns:repeat(5,1fr)"><div class="stat-card"><div class="stat-value">${fmt(s.target/1000,3)}</div><div class="stat-label">楼宇清单目标(MW)</div></div><div class="stat-card"><div class="stat-value">${fmt(s.initial/1000,3)}</div><div class="stat-label">初次可执行(MW)</div></div><div class="stat-card"><div class="stat-value">${fmt(s.transferred/1000,3)}</div><div class="stat-label">协同承接(MW)</div></div><div class="stat-card"><div class="stat-value">${fmt(s.final/1000,3)}</div><div class="stat-label">最终可执行(MW)</div></div><div class="stat-card"><div class="stat-value">${fmt(s.gap/1000,3)}</div><div class="stat-label">剩余缺口(MW)</div></div></div><div class="info-box"><strong>分配顺序：</strong>能力与约束检查 → 加权形成初次目标 → 超限任务转出 → 富余楼宇承接 → 进入单体策略仿真 → 结果回写。</div><details class="calc-logic"><summary>查看${this.synergyBuildings.length}栋楼宇能力与约束</summary><div class="calc-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>楼宇</th><th>空调类型</th><th>稳定能力</th><th>能力来源</th><th>响应周期</th><th>主要限制区域</th></tr></thead><tbody>${this.synergyBuildings.map(b=>`<tr><td style="text-align:left">${esc(b.name)}</td><td>${esc(b.acType)}</td><td>${fmt(b.potential,1)} kW</td><td>${b.dataSource}</td><td>${b.responseMin} min</td><td style="text-align:left">${b.constraint}</td></tr>`).join('')}</tbody></table></div></div></details><div class="panel"><div class="panel-header"><h3>楼宇任务分配与执行结果</h3><div style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--text-muted)">已执行 ${executedCount}/${this.synergyBuildings.length} · 最终任务 ${fmt(s.final,1)} kW</span><button class="btn btn-primary btn-sm" onclick="Aggregate.executeAll()">▶ ${executedCount===this.synergyBuildings.length?'重新一键执行':`一键执行${this.synergyBuildings.length}栋`}</button></div></div>
+      <div class="panel-body" style="padding:0"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+        <th>#</th><th>楼宇名称</th><th>空调类型</th><th>优先级</th><th>稳定能力</th><th>初次目标</th><th>待转出</th><th>承接量</th><th>最终任务</th><th>仿真削减</th><th>仿真缺口</th><th>执行状态</th><th>操作</th>
+      </tr></thead><tbody>
+        ${this.synergyBuildings.map(b=>{const r=this.executionResults[b.id];return`<tr><td>${b.seq}</td><td style="text-align:left"><strong>${b.name}</strong></td><td>${b.acType}</td><td><span class="badge ${b.priority==='一级'?'badge-red':b.priority==='二级'?'badge-orange':'badge-green'}">${b.priority}</span></td><td>${fmt(b.potential,1)}</td><td>${fmt(b.initial_target,1)}</td><td style="color:${b.transfer_out>0?'var(--warning)':'var(--text-muted)'}">${b.transfer_out>0?fmt(b.transfer_out,1):'-'}</td><td style="color:${b.accepted>0?'var(--success)':'var(--text-muted)'}">${b.accepted>0?'+'+fmt(b.accepted,1):'-'}</td><td style="font-weight:700;color:var(--accent-cyan)">${fmt(b.final_target,1)}</td><td>${r?fmt(r.actualReduction,1):'-'}</td><td style="color:${r&&r.gap>0?'var(--warning)':'var(--text-muted)'}">${r?fmt(r.gap,1):'-'}</td><td><span class="badge ${r?(r.success?'badge-green':'badge-red'):'badge-yellow'}">${r?(r.success?'已仿真':'已阻断'):'未执行'}</span></td><td><button class="btn btn-outline btn-sm" onclick="Aggregate.openDetail(${b.id})">${r?'查看/重算':'执行仿真'}</button></td></tr>`}).join('')}
+      </tbody></table></div></div></div>`;
+  },
+  executeAll(){
+    const outdoor=Number(Ledger.outdoorTemp)||35;
+    this.executionResults={};
+    this.synergyBuildings.forEach(b=>{
+      const e=SingleExecution.execute(b,b.final_target,outdoor,b.incentive,60);
+      this.executionResults[b.id]={actualReduction:e.actualReduction||0,gap:Math.max(0,b.final_target-(e.actualReduction||0)),achievementRate:e.achievementRate||0,strategyCode:e.strategyCode||'',success:e.success};
+    });
+    this.renderAllocation(document.getElementById('agTabBody'));
+    const actual=Object.values(this.executionResults).reduce((s,r)=>s+r.actualReduction,0);
+    const gap=Object.values(this.executionResults).reduce((s,r)=>s+r.gap,0);
+    showToast(`${this.synergyBuildings.length}栋仿真完成：削减 ${fmt(actual,1)} kW，缺口 ${fmt(gap,1)} kW`);
+  },
+  setSynergyParam(el){
+    const key=el.dataset.synergyParam;
+    this.synergyParams[key].value=parseFloat(el.value)||0;
+    this.computeSynergy();
+    this.renderTab();
+    showToast(`参数已更新：${key} = ${el.value}`);
+  },
+  exportAll(){
+    let csv='\ufeff序号,楼宇名称,业态,优先级,空调类型,稳定可调能力kW,调节权重,初次目标kW,安全上限kW,初次可执行kW,待转出kW,承接量kW,最终任务kW,最终利用率,合规,协同时段\n';
+    this.synergyBuildings.forEach(b=>{
+      csv+=[b.seq,b.name,b.category,b.priority,b.acType,fmt(b.potential,1),fmt(b.weight,2),fmt(b.initial_target,1),fmt(b.safety_limit,1),fmt(b.initial_executable,1),fmt(b.transfer_out,1),fmt(b.accepted,1),fmt(b.final_target,1),fmt(b.final_util*100,1)+'%',b.final_compliance,b.period].join(',')+'\n';
+    });
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='楼宇协同联动运行策略_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();
+    showToast('楼宇协同联动策略已导出');
+  }
+};
+
+/* ============================================================
+   模块五：单体策略执行（执行闭环）
+============================================================ */
+const SingleCtrl={
+  execution:null,
+  selectedBuildingId:null,
+  assignments(){if(!Aggregate.synergyBuildings.length)Aggregate.computeSynergy();return Aggregate.synergyBuildings.filter(b=>b.final_target>0.005);},
+  loadAssignment(id){Aggregate.openDetail(id);},
+  render(targetId='agTabBody',embedded=true){
+    const el=document.getElementById(targetId);
+    const assignments=this.assignments();
+    const selected=assignments.find(b=>b.id===this.selectedBuildingId);
+    if(!selected){el.innerHTML=`<div class="info-box">请先在“楼宇分配”中选择一栋楼宇进入单体执行。</div><button class="btn btn-outline" onclick="Aggregate.switchTab('allocation')">← 返回楼宇分配</button>`;return;}
+    el.innerHTML=`
+    <div class="page-header"><div><h2>${selected.name} · 单体策略详情</h2><div class="breadcrumb">楼宇协同与策略执行 / 最终任务 ${fmt(selected.final_target,1)} kW</div></div><div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" onclick="Aggregate.switchTab('allocation')">← 返回楼宇分配</button><button class="btn btn-outline btn-sm" id="scExportBtn" onclick="SingleCtrl.exportRecord()" ${this.execution?.building===selected.name?'':'disabled'}>📥 导出执行记录</button></div></div>
+
+    <div class="info-box">⚙️ <strong>统一任务来源：</strong>这里只执行“楼宇协同策略”已生成的最终任务。冷水机组按15分钟校核，多联机按5分钟校核；混合系统由单体策略分别调用对应设备分支。</div>
+
+    <div class="panel">
+      <div class="panel-header"><h3>执行参数</h3></div>
+      <div class="panel-body">
+        <div class="form-row">
+          <input type="hidden" id="scBuilding" value="${selected.id}">
+          <div class="form-group" style="min-width:280px"><label>执行楼宇</label><input class="form-input" value="${selected.name}（${selected.acType}）" readonly></div>
+          <div class="form-group"><label>协同最终任务 (kW)</label><input class="form-input" type="number" id="scTarget" value="${selected?fmt(selected.final_target,2):''}" readonly></div>
+          <div class="form-group"><label>室外温度 (℃)</label><input class="form-input" type="number" id="scOutdoor" value="35"></div>
+          <div class="form-group"><label>保持时长 (min)</label><input class="form-input" type="number" id="scDuration" value="60" min="10" step="5"></div>
+          <div class="form-group"><label>用户激励状态</label><select class="form-select" id="scIncentive"><option ${selected?.incentive==='无激励'?'selected':''}>无激励</option><option ${selected?.incentive!=='无激励'?'selected':''}>有激励</option></select></div>
+          <div class="form-group"><label>协同推荐策略</label><input class="form-input" value="${selected?selected.strategyLevel:'--'}" readonly></div>
+          <div class="form-group" style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="SingleCtrl.execute()">▶ 开始执行模拟</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="scResult"></div>`;
+  },
+  execute(){
+    const bid=parseInt(document.getElementById('scBuilding').value);
+    if(!bid){showToast('请先选择楼宇');return;}
+    const assignment=this.assignments().find(x=>x.id===bid);
+    if(!assignment){showToast('该楼宇不在当前协同分配结果中');return;}
+    const target=assignment.final_target;
+    const outdoor=parseFloat(document.getElementById('scOutdoor').value)||35;
+    const duration=Math.max(10,parseFloat(document.getElementById('scDuration').value)||60);
+    const inc=document.getElementById('scIncentive').value;
+    const b=assignment;
+
+    this.execution=SingleExecution.execute(b,target,outdoor,inc,duration);
+    const e=this.execution;
+    Aggregate.executionResults[bid]={actualReduction:e.actualReduction||0,gap:Math.max(0,target-(e.actualReduction||0)),achievementRate:e.achievementRate||0,strategyCode:e.strategyCode||'',success:e.success};
+    document.getElementById('scExportBtn').disabled=false;
+    const loads=e.timeline?.map(p=>p.load)||[b.baseLoad];
+    const minLoad=Math.min(...loads),maxLoad=Math.max(...loads);
+    const span=Math.max(1,maxLoad-minLoad);
+    const chartPoints=(e.timeline||[]).map((p,i)=>`${30+i*(640/Math.max(1,e.timeline.length-1))},${170-(p.load-minLoad)/span*130}`).join(' ');
+
+    const resultDiv=document.getElementById('scResult');
+    resultDiv.innerHTML=`
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon ${e.success?'green':'red'}">${e.success?'✅':'❌'}</div><div class="stat-value" style="font-size:20px">${e.success?'仿真完成':'仿真阻断'}</div><div class="stat-label">仿真状态</div></div>
+      <div class="stat-card"><div class="stat-icon blue">🎯</div><div class="stat-value">${e.target}</div><div class="stat-label">目标削减量 (kW)</div></div>
+      <div class="stat-card"><div class="stat-icon cyan">📊</div><div class="stat-value">${e.actualReduction}</div><div class="stat-label">仿真削减量 (kW)</div></div>
+      <div class="stat-card"><div class="stat-icon ${e.achievementRate>=90?'green':'orange'}">%</div><div class="stat-value">${e.achievementRate}%</div><div class="stat-label">目标达成率</div></div>
+    </div>
+
+    ${e.success?`
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-header"><h3>执行信息</h3></div>
+        <div class="panel-body">
+          <table class="mini-tb">
+            <tr><th>项目</th><th>值</th></tr>
+            <tr><td>楼宇</td><td>${e.building}</td></tr>
+            <tr><td>指令下发时间</td><td>${e.executedAt}</td></tr>
+            <tr><td>业态/空调</td><td>${e.type} / ${e.acType}</td></tr>
+            <tr><td>最终策略等级</td><td>${e.finalLevel===1?'Ⅰ级':e.finalLevel===2?'Ⅱ级':'Ⅲ级'}</td></tr>
+            <tr><td>策略编码</td><td><span class="badge badge-green">${e.strategyCode}</span></td></tr>
+            <tr><td>校核周期</td><td>${e.checkInterval} min（${e.acType.includes('冷水机组')&&e.acType.includes('多联机')?'混合系统按较慢周期':e.acType.includes('多联机')?'多联机快速响应':'水冷等待稳定'}）</td></tr>
+            <tr><td>保持时长</td><td>${e.duration} min</td></tr>
+            <tr><td>恢复反弹峰值</td><td>${fmt(e.reboundPeak,2)} kW</td></tr>
+            <tr><td>退出原因</td><td>${e.exitReason}</td></tr>
+            <tr><td>舒适度损失</td><td>温度上调 ${e.comfortLoss}℃</td></tr>
+            <tr><td>限制区域</td><td style="text-align:left;font-size:11px">${e.restricted}</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h3>执行闭环流程</h3></div>
+        <div class="panel-body">
+          ${e.phases.map((p,i)=>`
+            <div class="flow-step">
+              <div class="step-num ${p.status==='done'?'done':p.status==='active'?'active':''}">${i+1}</div>
+              <div class="step-content">
+                <div class="step-title">${p.phase} <span style="font-size:10px;color:var(--text-muted);margin-left:8px">${p.time}</span></div>
+                <div class="step-desc">${p.desc}</div>
+              </div>
+              <div>${p.status==='done'?'<span class="badge badge-green">完成</span>':p.status==='active'?'<span class="badge badge-yellow">进行中</span>':p.status==='blocked'?'<span class="badge badge-red">阻断</span>':'<span class="badge badge-blue">待执行</span>'}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>负荷调控与恢复曲线</h3><span style="font-size:11px;color:var(--text-muted)">基准 → 下发 → 校核 → 保持 → 分批恢复 → 反弹校核</span></div>
+      <div class="panel-body">
+        <svg viewBox="0 0 700 210" style="width:100%;height:230px;background:rgba(7,13,24,.35);border-radius:10px" role="img" aria-label="负荷调控与恢复曲线">
+          <line x1="30" y1="170" x2="670" y2="170" stroke="#334155"/><line x1="30" y1="40" x2="30" y2="170" stroke="#334155"/>
+          <polyline fill="none" stroke="#22d3ee" stroke-width="4" points="${chartPoints}"/>
+          ${(e.timeline||[]).map((p,i)=>{const x=30+i*(640/Math.max(1,e.timeline.length-1));const y=170-(p.load-minLoad)/span*130;return `<circle cx="${x}" cy="${y}" r="4" fill="#60a5fa"><title>${p.stage}：${p.load}kW</title></circle><text x="${x}" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">${p.minute}m</text>`}).join('')}
+          <text x="38" y="32" fill="#94a3b8" font-size="10">负荷 kW（${fmt(minLoad,0)}–${fmt(maxLoad,0)}）</text>
+        </svg>
+        <div class="data-table-wrapper" style="margin-top:12px"><table class="data-table"><thead><tr><th>相对时间</th><th>阶段</th><th>负荷(kW)</th><th>削减量(kW)</th></tr></thead><tbody>
+          ${(e.timeline||[]).map(p=>`<tr><td>${p.minute} min</td><td>${p.stage}</td><td>${fmt(p.load,2)}</td><td>${fmt(p.reduction,2)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>
+    </div>`:`
+    <div class="info-box warning"><strong>执行未开始：</strong>${e.reason}</div>`}
+    `;
+    showToast(e.success?'单体执行记录已生成':'执行被阻断');
+  },
+  exportRecord(){
+    const e=this.execution;if(!e){showToast('请先执行一次任务');return;}
+    let csv='\ufeff楼宇,仿真时间,目标削减kW,仿真削减kW,达成率,保持时长min,反弹峰值kW,退出原因\n';
+    csv+=[e.building,e.executedAt,e.target,e.actualReduction,e.achievementRate+'%',e.duration,e.reboundPeak,e.exitReason].map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')+'\n\n';
+    csv+='相对时间min,阶段,负荷kW,削减量kW\n';
+    (e.timeline||[]).forEach(p=>{csv+=[p.minute,p.stage,p.load,p.reduction].join(',')+'\n';});
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='调控执行记录_'+new Date().toISOString().slice(0,10)+'.csv';a.click();showToast('执行记录已导出');
+  }
+};
+
+/* ============================================================
+   模块七：区县可调潜力分配
+   三维加权模型：A_i = ω1·归一化潜力 + ω2·历史响应率 + ω3·区域等级系数
+   目标与参数 → 基础分配 → 并列方案比选 → 最终任务 → 轮调排班
+============================================================ */
+const DistrictAlloc = {
+  GROUPS: {
+    '渝中区':'主城都市区','江北区':'主城都市区','渝北区':'主城都市区','九龙坡区':'主城都市区','南岸区':'主城都市区',
+    '沙坪坝区':'主城都市区','北碚区':'主城都市区','巴南区':'主城都市区','大渡口区':'主城都市区','涪陵区':'主城都市区',
+    '永川区':'主城都市区','江津区':'主城都市区','合川区':'主城都市区','璧山区':'主城都市区','长寿区':'主城都市区',
+    '大足区':'主城都市区','綦江区':'主城都市区','铜梁区':'主城都市区','荣昌区':'主城都市区','南川区':'主城都市区',
+    '潼南区':'主城都市区','万州区':'渝东北三峡库区','开州区':'渝东北三峡库区','梁平区':'渝东北三峡库区',
+    '垫江县':'渝东北三峡库区','忠县':'渝东北三峡库区','云阳县':'渝东北三峡库区','丰都县':'渝东北三峡库区',
+    '奉节县':'渝东北三峡库区','巫山县':'渝东北三峡库区','巫溪县':'渝东北三峡库区','城口县':'渝东北三峡库区',
+    '黔江区':'渝东南武陵山区','秀山县':'渝东南武陵山区','石柱县':'渝东南武陵山区','彭水县':'渝东南武陵山区',
+    '酉阳县':'渝东南武陵山区','武隆区':'渝东南武陵山区'
+  },
+  DEFAULT_DISTRICTS: [
+    {name:'渝中区',tier:'第一梯队',potential:167.5,history_rate:0.96,region_coeff:0.95},
+    {name:'江北区',tier:'第一梯队',potential:122.6,history_rate:0.96,region_coeff:0.94},
+    {name:'渝北区',tier:'第一梯队',potential:119.6,history_rate:0.95,region_coeff:0.93},
+    {name:'九龙坡区',tier:'第二梯队',potential:58.2,history_rate:0.93,region_coeff:0.90},
+    {name:'南岸区',tier:'第二梯队',potential:54.7,history_rate:0.93,region_coeff:0.89},
+    {name:'沙坪坝区',tier:'第二梯队',potential:51.4,history_rate:0.92,region_coeff:0.88},
+    {name:'北碚区',tier:'第二梯队',potential:38.3,history_rate:0.90,region_coeff:0.85},
+    {name:'巴南区',tier:'第二梯队',potential:35.8,history_rate:0.90,region_coeff:0.84},
+    {name:'大渡口区',tier:'第二梯队',potential:33.2,history_rate:0.89,region_coeff:0.82},
+    {name:'涪陵区',tier:'第三梯队',potential:39.5,history_rate:0.86,region_coeff:0.72},
+    {name:'永川区',tier:'第三梯队',potential:36.7,history_rate:0.85,region_coeff:0.71},
+    {name:'江津区',tier:'第三梯队',potential:31.8,history_rate:0.85,region_coeff:0.70},
+    {name:'合川区',tier:'第三梯队',potential:29.1,history_rate:0.84,region_coeff:0.69},
+    {name:'璧山区',tier:'第三梯队',potential:27.4,history_rate:0.84,region_coeff:0.68},
+    {name:'长寿区',tier:'第三梯队',potential:26.6,history_rate:0.83,region_coeff:0.67},
+    {name:'大足区',tier:'第三梯队',potential:24.9,history_rate:0.83,region_coeff:0.66},
+    {name:'綦江区',tier:'第三梯队',potential:23.2,history_rate:0.82,region_coeff:0.65},
+    {name:'铜梁区',tier:'第三梯队',potential:22.1,history_rate:0.82,region_coeff:0.64},
+    {name:'荣昌区',tier:'第三梯队',potential:21.8,history_rate:0.81,region_coeff:0.63},
+    {name:'南川区',tier:'第三梯队',potential:19.5,history_rate:0.81,region_coeff:0.62},
+    {name:'潼南区',tier:'第三梯队',potential:18.7,history_rate:0.80,region_coeff:0.61},
+    {name:'万州区',tier:'第四梯队',potential:29.6,history_rate:0.78,region_coeff:0.58},
+    {name:'开州区',tier:'第四梯队',potential:21.4,history_rate:0.76,region_coeff:0.55},
+    {name:'黔江区',tier:'第四梯队',potential:17.2,history_rate:0.75,region_coeff:0.52},
+    {name:'梁平区',tier:'第五梯队',potential:16.8,history_rate:0.72,region_coeff:0.48},
+    {name:'垫江县',tier:'第五梯队',potential:15.2,history_rate:0.72,region_coeff:0.48},
+    {name:'忠县',tier:'第五梯队',potential:14.7,history_rate:0.71,region_coeff:0.47},
+    {name:'云阳县',tier:'第五梯队',potential:14.1,history_rate:0.71,region_coeff:0.47},
+    {name:'丰都县',tier:'第五梯队',potential:12.9,history_rate:0.70,region_coeff:0.46},
+    {name:'奉节县',tier:'第五梯队',potential:11.2,history_rate:0.70,region_coeff:0.46},
+    {name:'秀山县',tier:'第五梯队',potential:11.8,history_rate:0.69,region_coeff:0.45},
+    {name:'石柱县',tier:'第五梯队',potential:10.5,history_rate:0.69,region_coeff:0.45},
+    {name:'彭水县',tier:'第五梯队',potential:9.7,history_rate:0.68,region_coeff:0.44},
+    {name:'酉阳县',tier:'第五梯队',potential:9.2,history_rate:0.68,region_coeff:0.44},
+    {name:'武隆区',tier:'第五梯队',potential:8.9,history_rate:0.67,region_coeff:0.43},
+    {name:'巫山县',tier:'第五梯队',potential:8.7,history_rate:0.67,region_coeff:0.43},
+    {name:'巫溪县',tier:'第五梯队',potential:6.5,history_rate:0.66,region_coeff:0.42},
+    {name:'城口县',tier:'第五梯队',potential:4.2,history_rate:0.65,region_coeff:0.40}
+  ],
+  params: {
+    '全域削峰总目标': { value: 256.4, unit: 'MW', desc: '全域削峰目标，全表分配逻辑自动刷新' },
+    '单区县安全余量系数': { value: 0.2, unit: '-', desc: '区县可执行上限=该系数×中性潜力' },
+    '潜力权重ω₁': { value: 0.6, unit: '-', desc: '三项权重之和必须等于1' },
+    '历史响应率权重ω₂': { value: 0.25, unit: '-', desc: '' },
+    '区域等级系数权重ω₃': { value: 0.15, unit: '-', desc: '' },
+    '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '方案B中，富余区县最多用80%剩余空间参与互济' }
+  },
+  districts: [],
+  tab: 'params',
+  selectedScheme: 'mutual',
+  inited: false,
+  init() {
+    if (!this.inited) {
+      // 双向绑定：初始化时从全市推算读取20%可下发量作为默认目标
+      if (typeof CityPotential !== 'undefined') {
+        const t = CityPotential.totals();
+        this.params['全域削峰总目标'].value = parseFloat(fmt(CityPotential.mw(t.dispatch20), 1));
+      }
+      this.compute(); this.inited = true;
+    }
+    this.render();
+  },
+  compute() {
+    const P = {};
+    Object.keys(this.params).forEach(k => { P[k] = parseFloat(this.params[k].value) || 0; });
+    const totalTarget = P['全域削峰总目标'] || 256.4;
+    const safety = P['单区县安全余量系数'] || 0.2;
+    const w1 = P['潜力权重ω₁'] || 0.6, w2 = P['历史响应率权重ω₂'] || 0.25, w3 = P['区域等级系数权重ω₃'] || 0.15;
+    const lambda = P['邻接互济分配系数λ'] || 0.8;
+    const source = typeof CITY_DISTRICTS!=='undefined' ? CITY_DISTRICTS.map(c=>{
+      const old=this.DEFAULT_DISTRICTS.find(d=>d.name===c.district)||{};
+      return{name:c.district,tier:c.tier,potential:c.neutral/1000,history_rate:old.history_rate||0.75,region_coeff:old.region_coeff||0.5};
+    }) : this.DEFAULT_DISTRICTS;
+    const maxPot = Math.max(...source.map(d => d.potential));
+    this.districts = source.map((d, i) => {
+      const normPot = d.potential / maxPot;
+      const A_i = w1 * normPot + w2 * d.history_rate + w3 * d.region_coeff;
+      return { seq: i+1, name: d.name, tier: d.tier, group: this.GROUPS[d.name] || '未知',
+        potential: d.potential, history_rate: d.history_rate, region_coeff: d.region_coeff,
+        norm_potential: normPot, A_i, max_adjustable: d.potential * safety };
+    });
+    const totalA = this.districts.reduce((s,d) => s + d.A_i, 0);
+    this.districts.forEach(d => {
+      d.capacity_ratio = d.A_i / totalA;
+      d.initial_target = d.capacity_ratio * totalTarget;
+      d.first_dispatch = Math.min(d.initial_target, d.max_adjustable);
+      d.first_unmet = Math.max(0, d.initial_target - d.max_adjustable);
+      d.remaining_space = Math.max(0, d.max_adjustable - d.initial_target);
+      d.deviation = d.initial_target - d.max_adjustable;
+      d.status = d.deviation > 0.5 ? '缺口' : (d.deviation < -0.5 ? '富余' : '平衡');
+      d.intra_group_aid = 0; d.cross_group_aid = 0; d.mutual_aid = 0;
+    });
+    // 方案A：全域二次下发，只看全市剩余空间。
+    const totalFirstUnmet = this.districts.reduce((s, d) => s + d.first_unmet, 0);
+    const totalRemainingSpace = this.districts.reduce((s, d) => s + d.remaining_space, 0);
+    const secondDispatchTotal = Math.min(totalFirstUnmet, totalRemainingSpace);
+    this.districts.forEach(d => {
+      d.second_dispatch = totalRemainingSpace > 0 ? Math.min(d.remaining_space, secondDispatchTotal * d.remaining_space / totalRemainingSpace) : 0;
+      d.after_second_dispatch = d.first_dispatch + d.second_dispatch;
+      d.second_final = d.after_second_dispatch;
+      d.second_status = d.second_dispatch > 0.005 ? '接收二次下发' : (d.first_unmet > 0.005 ? '无可调空间' : '无需二次下发');
+    });
+    // 方案B：先在同片区承接缺口，再跨片区承接；总承接量受互济系数限制。
+    this.districts.forEach(d=>{d.mutual_final=d.first_dispatch;d.mutual_capacity=d.remaining_space*lambda;});
+    const distribute=(amount,candidates,field)=>{
+      const capacity=candidates.reduce((s,d)=>s+Math.max(0,d.mutual_capacity-(d.intra_group_aid+d.cross_group_aid)),0);
+      const moved=Math.min(amount,capacity);
+      candidates.forEach(d=>{const left=Math.max(0,d.mutual_capacity-(d.intra_group_aid+d.cross_group_aid));const add=capacity>0?moved*left/capacity:0;d[field]+=add;d.mutual_final+=add;});
+      return amount-moved;
+    };
+    const groups={};this.districts.forEach(d=>(groups[d.group]=groups[d.group]||[]).push(d));
+    let crossNeed=0;
+    Object.values(groups).forEach(gs=>{const need=gs.reduce((s,d)=>s+d.first_unmet,0);crossNeed+=distribute(need,gs.filter(d=>d.remaining_space>0), 'intra_group_aid');});
+    distribute(crossNeed,this.districts.filter(d=>d.remaining_space>0),'cross_group_aid');
+    this.districts.forEach(d => {
+      d.mutual_aid = d.intra_group_aid + d.cross_group_aid;
+      d.mutual_adjustment=d.mutual_final-d.initial_target;
+      d.final_target=this.selectedScheme==='second'?d.second_final:d.mutual_final;
+      d.final_adjustment=d.final_target-d.initial_target;
+      d.load_utilization = d.max_adjustable > 0 ? d.final_target / d.max_adjustable : 0;
+      d.compliance = d.load_utilization <= 1.05 ? '合规' : '超限';
+    });
+    const days = 7;
+    this.districts.forEach(d => {
+      const lr = d.load_utilization;
+      let rotDays;
+      if (lr >= 0.95) rotDays = Math.ceil(days * 0.85);
+      else if (lr >= 0.8) rotDays = Math.ceil(days * 0.7);
+      else if (lr >= 0.5) rotDays = Math.ceil(days * 0.57);
+      else rotDays = Math.ceil(days * 0.43);
+      d.rotDays = Math.max(3, Math.min(rotDays, days - 1));
+      d.schedule = [];
+      for (let i = 0; i < days; i++) d.schedule.push('');
+    });
+    const groupNames = ['主城都市区','渝东北三峡库区','渝东南武陵山区'];
+    groupNames.forEach((gName, gi) => {
+      const gDists = this.districts.filter(d => d.group === gName).sort((a,b) => b.final_target - a.final_target);
+      gDists.forEach((d, di) => {
+        const restOffsets = [];
+        for (let r = 0; r < days - d.rotDays; r++) restOffsets.push((gi + di + r * 3) % days);
+        for (let day = 0; day < days; day++) d.schedule[day] = restOffsets.indexOf(day) >= 0 ? '休' : '●';
+      });
+    });
+  },
+  render() {
+    const el = document.getElementById('page-district');
+    const totalPot = this.districts.reduce((s,d) => s + d.potential, 0);
+    const surplus = this.districts.filter(d => d.status === '富余').length;
+    const deficit = this.districts.filter(d => d.status === '缺口').length;
+    const finalTotal = this.districts.reduce((s,d) => s + d.final_target, 0);
+    const target=parseFloat(this.params['全域削峰总目标'].value)||0;
+    const finalGap=Math.max(0,target-finalTotal);
+    const schemeName=this.selectedScheme==='second'?'方案A · 全域二次下发':'方案B · 分区轮调互济';
+    el.innerHTML = `
+    <div class="page-header">
+      <div><h2>区县可调潜力分配（38区县）</h2><div class="breadcrumb">潜力与分配 / 区县分配</div></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary btn-sm" onclick="DistrictAlloc.compute();DistrictAlloc.render()">🔄 重新计算</button>
+        <button class="btn btn-outline btn-sm" onclick="DistrictAlloc.exportCSV()">📥 导出CSV</button>
+      </div>
+    </div>
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
+      <div class="stat-card"><div class="stat-icon cyan">🎯</div><div class="stat-value">${this.params['全域削峰总目标'].value}</div><div class="stat-label">全域削峰目标 (MW)</div><div class="stat-change up">目标可调整</div></div>
+      <div class="stat-card"><div class="stat-icon purple">📉</div><div class="stat-value">${fmt(totalPot,1)}</div><div class="stat-label">全市中性潜力 (MW)</div><div class="stat-change up">与全市推算口径一致</div></div>
+      <div class="stat-card"><div class="stat-icon blue">📋</div><div class="stat-value">${fmt(this.districts.reduce((s,d)=>s+d.first_dispatch,0),1)}</div><div class="stat-label">初次可执行量 (MW)</div><div class="stat-change up">${deficit} 个区县出现缺口</div></div>
+      <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-value">${fmt(finalTotal,1)}</div><div class="stat-label">当前方案可执行量 (MW)</div><div class="stat-change up">${schemeName}</div></div>
+      <div class="stat-card"><div class="stat-icon ${finalGap>0.05?'red':'green'}">${finalGap>0.05?'⚠️':'✓'}</div><div class="stat-value">${fmt(finalGap,1)}</div><div class="stat-label">剩余缺口 (MW)</div><div class="stat-change ${finalGap>0.05?'down':'up'}">${finalGap>0.05?'需要市级兜底':'目标已覆盖'}</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn ${this.tab==='params'?'active':''}" onclick="DistrictAlloc.switchTab('params')">1　目标与参数</button>
+      <button class="tab-btn ${this.tab==='alloc'?'active':''}" onclick="DistrictAlloc.switchTab('alloc')">2　基础分配</button>
+      <button class="tab-btn ${this.tab==='compare'?'active':''}" onclick="DistrictAlloc.switchTab('compare')">3　方案对比</button>
+      <button class="tab-btn ${this.tab==='final'?'active':''}" onclick="DistrictAlloc.switchTab('final')">4　最终任务</button>
+      <button class="tab-btn ${this.tab==='rotation'?'active':''}" onclick="DistrictAlloc.switchTab('rotation')">5　轮调排班</button>
+    </div>
+    <details class="calc-logic">
+      <summary>📘 计算逻辑说明 <span class="calc-hint">点开查看这套数字是怎么算出来的</span></summary>
+      <div class="calc-body">
+        <p><b>基础分配：</b>三维权重确定初次目标，再以“区县中性潜力 × 安全系数”限制可执行量。</p>
+        <div class="formula-box">Aᵢ = ${this.params['潜力权重ω₁'].value}×潜力归一化 + ${this.params['历史响应率权重ω₂'].value}×历史响应率 + ${this.params['区域等级系数权重ω₃'].value}×区域等级系数</div>
+        <p><b>方案A · 全域二次下发：</b>把所有初次缺口汇总后，按全市剩余空间比例重新分配，不考虑片区距离。</p>
+        <p><b>方案B · 分区轮调互济：</b>先由同片区有余量区县承接，再跨片区承接；单区互济容量受 λ=${this.params['邻接互济分配系数λ'].value} 限制。</p>
+        <p><b>最终任务：</b>只采用当前选定方案；7日排班只根据该方案最终任务生成，两种方案不叠加。</p>
+      </div>
+    </details>
+    <div id="districtTabBody"></div>`;
+    this.renderTab();
+  },
+  switchTab(t) { this.tab = t; this.render(); },
+  selectScheme(scheme) {
+    this.selectedScheme = scheme;
+    this.compute();
+    this.tab = 'compare';
+    this.render();
+    showToast(`已采用${scheme==='second'?'方案A：全域二次下发':'方案B：分区轮调互济'}`);
+  },
+  renderTab() {
+    const body = document.getElementById('districtTabBody');
+    if (this.tab === 'params') {
+      body.innerHTML = `<div class="info-box">全市中性潜力由“全市可调潜力推算”统一提供，本页只设置分配目标、执行上限和策略参数。</div><div class="panel"><div class="panel-header"><h3>目标与参数</h3><span style="font-size:11px;color:var(--text-muted);">修改后立即重新计算</span></div>
+        <div class="panel-body"><div class="param-grid">${Object.keys(this.params).map(k => `
+          <div class="param-card"><h3>${k}</h3>
+            <div class="value-row"><input type="number" step="0.001" value="${this.params[k].value}" data-param="${k}" onchange="DistrictAlloc.setParam(this)"><span class="unit">${this.params[k].unit}</span></div>
+            <div class="desc">${this.params[k].desc}</div></div>`).join('')}</div></div></div>`;
+    } else if (this.tab === 'alloc') {
+      body.innerHTML = `<div class="panel"><div class="panel-header"><h3>基础分配</h3><span style="font-size:11px;color:var(--text-muted);">加权形成初次目标，再由安全上限判断实际可执行量</span></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+          <th>#</th><th>区县</th><th>片区</th><th>中性潜力(MW)</th><th>响应率</th><th>初次目标(MW)</th><th>安全上限(MW)</th><th>初次可执行(MW)</th><th>初次缺口(MW)</th><th>状态</th></tr></thead><tbody>
+          ${this.districts.map(d => `<tr><td>${d.seq}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td>
+            <td>${fmt(d.potential,1)}</td><td>${fmt(d.history_rate*100,0)}%</td><td style="font-weight:600;">${fmt(d.initial_target,2)}</td>
+            <td>${fmt(d.max_adjustable,2)}</td><td>${fmt(d.first_dispatch,2)}</td>
+            <td style="color:${d.first_unmet>0.005?'var(--danger)':'var(--text-muted)'};">${fmt(d.first_unmet,2)}</td>
+            <td><span class="badge ${d.status==='富余'?'badge-green':d.status==='缺口'?'badge-red':'badge-yellow'}">${d.status}</span></td></tr>`).join('')}
+        </tbody></table></div></div></div>`;
+    } else if (this.tab === 'compare') {
+      const target=parseFloat(this.params['全域削峰总目标'].value)||0;
+      const firstTotal=this.districts.reduce((s,d)=>s+d.first_dispatch,0);
+      const secondTotal=this.districts.reduce((s,d)=>s+d.second_final,0);
+      const mutualTotal=this.districts.reduce((s,d)=>s+d.mutual_final,0);
+      const secondGap=Math.max(0,target-secondTotal), mutualGap=Math.max(0,target-mutualTotal);
+      const secondMoved=this.districts.reduce((s,d)=>s+d.second_dispatch,0);
+      const intraMoved=this.districts.reduce((s,d)=>s+d.intra_group_aid,0);
+      const crossMoved=this.districts.reduce((s,d)=>s+d.cross_group_aid,0);
+      const pct=v=>target?Math.max(0,v/target*100):0;
+      const receiverRows=(scheme,limit)=>this.districts.map(d=>({name:d.name,group:d.group,initial:d.first_dispatch,intra:scheme==='mutual'?d.intra_group_aid:0,cross:scheme==='mutual'?d.cross_group_aid:0,added:scheme==='second'?d.second_dispatch:d.mutual_aid,final:scheme==='second'?d.second_final:d.mutual_final})).filter(d=>d.added>0.005).sort((a,b)=>b.added-a.added).slice(0,limit);
+      const receiverTable=(scheme,limit)=>receiverRows(scheme,limit).map((d,i)=>`<tr><td>${i+1}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td><td>${fmt(d.initial,2)}</td>${scheme==='mutual'?`<td>${fmt(d.intra,2)}</td><td>${fmt(d.cross,2)}</td>`:''}<td style="color:var(--success);font-weight:600">+${fmt(d.added,2)}</td><td>${fmt(d.final,2)}</td></tr>`).join('');
+      const card=(scheme,title,desc,total,gap,segments,detail)=>{
+        const topCount=receiverRows(scheme,99).length;
+        return `<div class="panel" style="border:${this.selectedScheme===scheme?'2px solid var(--accent-blue)':'1px solid var(--border)'}"><div class="panel-header"><h3>${title}</h3>${this.selectedScheme===scheme?'<span class="badge badge-green">当前采用</span>':''}</div><div class="panel-body"><p style="color:var(--text-secondary);min-height:42px">${desc}</p>
+          <div style="margin:18px 0 8px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:7px"><span>0 MW</span><strong style="color:var(--text-primary)">目标 ${fmt(target,1)} MW</strong></div><div style="display:flex;height:34px;border-radius:8px;overflow:hidden;background:rgba(239,68,68,.18);border:1px solid var(--border)" title="初次分配后采用该方案的总量效果">${segments}</div><div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12px;color:var(--text-secondary)"><span>■ <i style="color:#3b82f6;font-style:normal">初次可执行 ${fmt(firstTotal,1)}</i></span>${scheme==='second'?`<span>■ <i style="color:#22c55e;font-style:normal">全域追加 ${fmt(secondMoved,1)}</i></span>`:`<span>■ <i style="color:#22c55e;font-style:normal">片区内 ${fmt(intraMoved,1)}</i></span><span>■ <i style="color:#f59e0b;font-style:normal">跨片区 ${fmt(crossMoved,1)}</i></span>`}<span>■ <i style="color:#ef4444;font-style:normal">剩余缺口 ${fmt(gap,1)}</i></span></div></div>
+          <div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin:18px 0"><div><div class="stat-value">${fmt(total,1)}</div><div class="stat-label">最终可执行量 (MW)</div></div><div><div class="stat-value">${fmt(target?total/target*100:0,1)}%</div><div class="stat-label">目标完成率</div></div><div><div class="stat-value">${fmt(gap,1)}</div><div class="stat-label">剩余缺口 (MW)</div></div><div><div class="stat-value" style="font-size:18px">${detail}</div><div class="stat-label">再分配情况</div></div></div>
+          <h4 style="margin:18px 0 8px">承接量最大的5个区县</h4><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>#</th><th>区县</th><th>片区</th><th>初次可执行</th>${scheme==='mutual'?'<th>片内</th><th>跨区</th>':''}<th>追加量</th><th>方案后</th></tr></thead><tbody>${receiverTable(scheme,5)}</tbody></table></div>
+          ${topCount>5?`<details style="margin:12px 0"><summary style="cursor:pointer;color:var(--accent-blue)">查看全部 ${topCount} 个承接区县</summary><div class="data-table-wrapper" style="margin-top:10px"><table class="data-table"><thead><tr><th>#</th><th>区县</th><th>片区</th><th>初次可执行</th>${scheme==='mutual'?'<th>片内</th><th>跨区</th>':''}<th>追加量</th><th>方案后</th></tr></thead><tbody>${receiverTable(scheme,99)}</tbody></table></div></details>`:''}
+          <button class="btn ${this.selectedScheme===scheme?'btn-primary':'btn-outline'}" onclick="DistrictAlloc.selectScheme('${scheme}')">${this.selectedScheme===scheme?'已采用':'采用此方案'}</button></div></div>`;
+      };
+      const aSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(secondMoved)}%;background:#22c55e" title="全域追加 ${fmt(secondMoved,1)} MW"></div>`;
+      const bSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(intraMoved)}%;background:#22c55e" title="片区内承接 ${fmt(intraMoved,1)} MW"></div><div style="width:${pct(crossMoved)}%;background:#f59e0b" title="跨片区承接 ${fmt(crossMoved,1)} MW"></div>`;
+      body.innerHTML=`<div class="info-box"><strong>共同起点：</strong>削峰目标 ${fmt(target,1)} MW → 初次可执行 ${fmt(firstTotal,1)} MW → 待解决缺口 ${fmt(Math.max(0,target-firstTotal),1)} MW。两张图采用相同刻度，展示初次分配后分别采用两种方案的结果。</div><div class="grid-2">${card('second','方案A · 全域二次下发','汇总全市缺口，按各区县剩余空间比例统一再分配。',secondTotal,secondGap,aSegments,`全域追加 ${fmt(secondMoved,1)} MW`)}${card('mutual','方案B · 分区轮调互济','优先在同片区承接，再将未解决缺口跨片区分配。',mutualTotal,mutualGap,bSegments,`片内 ${fmt(intraMoved,1)} / 跨区 ${fmt(crossMoved,1)} MW`)}</div><div class="panel"><div class="panel-header"><h3>方案差异</h3></div><div class="panel-body"><table class="data-table"><thead><tr><th>指标</th><th>方案A</th><th>方案B</th></tr></thead><tbody><tr><td>组织方式</td><td>全市统一调度</td><td>片区优先、跨片区补充</td></tr><tr><td>空间使用限制</td><td>可使用全部剩余空间</td><td>受互济系数 λ 限制</td></tr><tr><td>最终可执行量</td><td>${fmt(secondTotal,1)} MW</td><td>${fmt(mutualTotal,1)} MW</td></tr><tr><td>剩余缺口</td><td>${fmt(secondGap,1)} MW</td><td>${fmt(mutualGap,1)} MW</td></tr></tbody></table></div></div>`;
+    } else if (this.tab === 'second') {
+      const totalFirstUnmet = this.districts.reduce((s,d) => s + d.first_unmet, 0);
+      const totalRemainingSpace = this.districts.reduce((s,d) => s + d.remaining_space, 0);
+      const secondTotal = this.districts.reduce((s,d) => s + d.second_dispatch, 0);
+      const exhausted = this.districts.filter(d => d.first_unmet > 0.005).length;
+      const receivers = this.districts.filter(d => d.second_dispatch > 0.005).length;
+      const totalInitialTarget = this.districts.reduce((s,d) => s + d.initial_target, 0);
+      const totalFirstDispatch = this.districts.reduce((s,d) => s + d.first_dispatch, 0);
+      const remainingGap = Math.max(0, totalFirstUnmet - secondTotal);
+      body.innerHTML = `<div class="info-box">📤 初次分配后，${exhausted} 个区县存在未满足指令，合计 ${fmt(totalFirstUnmet,2)} MW；${receivers} 个区县仍有可调空间，按剩余空间比例接收二次下发 ${fmt(secondTotal,2)} MW。${totalFirstUnmet > totalRemainingSpace + 0.005 ? `仍有 ${fmt(totalFirstUnmet - totalRemainingSpace,2)} MW 缺口，后续由互济修正或市级兜底处理。` : ''}</div>
+      <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        <div class="stat-card"><div class="stat-icon blue">🎯</div><div class="stat-value">${fmt(totalInitialTarget,2)}</div><div class="stat-label">初次分配总目标 (MW)</div></div>
+        <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-value">${fmt(totalFirstDispatch,2)}</div><div class="stat-label">初次分配已完成 (MW)</div></div>
+        <div class="stat-card" style="border:2px solid var(--warning);box-shadow:0 0 12px rgba(245,158,11,0.3)"><div class="stat-icon orange">⚠️</div><div class="stat-value" style="color:var(--warning)">${fmt(totalFirstUnmet,2)}</div><div class="stat-label">未分配目标潜力 (MW)</div><div class="stat-change up">${exhausted} 个区县缺口</div></div>
+        <div class="stat-card"><div class="stat-icon cyan">📤</div><div class="stat-value">${fmt(secondTotal,2)}</div><div class="stat-label">二次下发量 (MW)</div><div class="stat-change up">${receivers} 个区县接收</div></div>
+        <div class="stat-card"><div class="stat-icon ${remainingGap>0.5?'red':'green'}">${remainingGap>0.5?'🔴':'🟢'}</div><div class="stat-value" style="color:${remainingGap>0.5?'var(--danger)':'var(--success)'}">${fmt(remainingGap,2)}</div><div class="stat-label">二次下发后剩余缺口 (MW)</div><div class="stat-change ${remainingGap>0.5?'down':'up'}">${remainingGap>0.5?'需互济/兜底':'已全部满足'}</div></div>
+      </div>
+      <div class="panel"><div class="panel-header"><h3>二次下发与剩余空间核算</h3><span style="font-size:11px;color:var(--text-muted);">只向仍有可调空间的区县下发</span></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+          <th>#</th><th>区县</th><th>片区</th><th>初次指令(MW)</th><th>初次可执行(MW)</th><th>初次未满足(MW)</th><th>剩余可调空间(MW)</th><th>二次下发(MW)</th><th>二次后合计(MW)</th><th>状态</th></tr></thead><tbody>
+          ${this.districts.map(d => `<tr><td>${d.seq}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td>
+            <td>${fmt(d.initial_target,2)}</td><td>${fmt(d.first_dispatch,2)}</td><td style="color:${d.first_unmet>0?'var(--danger)':'var(--text-muted)'};">${fmt(d.first_unmet,2)}</td>
+            <td style="color:${d.remaining_space>0?'var(--success)':'var(--text-muted)'};">${fmt(d.remaining_space,2)}</td>
+            <td style="font-weight:600;color:${d.second_dispatch>0?'var(--accent-cyan)':'var(--text-muted)'};">${fmt(d.second_dispatch,2)}</td>
+            <td style="font-weight:600;">${fmt(d.after_second_dispatch,2)}</td>
+            <td><span class="badge ${d.second_dispatch>0.005?'badge-cyan':d.first_unmet>0.005?'badge-red':'badge-yellow'}">${d.second_status}</span></td></tr>`).join('')}
+          <tr style="background:var(--bg-panel);"><td colspan="3"><strong>全市合计</strong></td><td>${fmt(this.districts.reduce((s,d)=>s+d.initial_target,0),2)}</td><td>${fmt(this.districts.reduce((s,d)=>s+d.first_dispatch,0),2)}</td><td>${fmt(totalFirstUnmet,2)}</td><td>${fmt(totalRemainingSpace,2)}</td><td>${fmt(secondTotal,2)}</td><td>${fmt(this.districts.reduce((s,d)=>s+d.after_second_dispatch,0),2)}</td><td>-</td></tr>
+        </tbody></table></div></div></div>`;
+    } else if (this.tab === 'mutual') {
+      body.innerHTML = `<div class="panel"><div class="panel-header"><h3>片区内 + 跨片区邻接互济明细</h3></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+          <th>#</th><th>区县</th><th>片区</th><th>初次分配</th><th>上限</th><th>偏差</th>
+          <th>片区内互济</th><th>跨片区互济</th><th>总互济</th><th>最终分配</th></tr></thead><tbody>
+          ${this.districts.map(d => `<tr><td>${d.seq}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td>
+            <td>${fmt(d.initial_target,2)}</td><td>${fmt(d.max_adjustable,2)}</td><td>${fmt(d.deviation,2)}</td>
+            <td style="color:${d.intra_group_aid>0?'var(--success)':d.intra_group_aid<0?'var(--danger)':'var(--text-muted)'};">${fmt(d.intra_group_aid,2)}</td>
+            <td style="color:${d.cross_group_aid>0?'var(--success)':d.cross_group_aid<0?'var(--danger)':'var(--text-muted)'};">${fmt(d.cross_group_aid,2)}</td>
+            <td style="font-weight:bold;color:${d.mutual_aid>0?'var(--success)':d.mutual_aid<0?'var(--danger)':'var(--text-muted)'};">${fmt(d.mutual_aid,2)}</td>
+            <td style="font-weight:600;color:var(--warning);">${fmt(d.final_target,2)}</td></tr>`).join('')}
+        </tbody></table></div></div></div>`;
+    } else if (this.tab === 'rotation') {
+      const days = 7;
+      const schemeName=this.selectedScheme==='second'?'方案A · 全域二次下发':'方案B · 分区轮调互济';
+      body.innerHTML = `<div class="info-box">本排班根据当前采用的“${schemeName}”最终任务生成。● 表示参与调控，休表示轮休；每日合计是轮调日任务，不等同于全域削峰总目标。</div><div class="panel"><div class="panel-header"><h3>7日轮调排班表</h3><span style="font-size:11px;color:var(--text-muted);">● 参与调控 / 休 轮休</span></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+          <th>区县</th><th>片区</th><th>最终目标</th>${Array.from({length:days},(_,i)=>`<th>D${i+1}</th>`).join('')}<th>参与天数</th><th>日均负荷</th></tr></thead><tbody>
+          ${this.districts.map(d => `<tr><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.group}</td><td>${fmt(d.final_target,1)}</td>
+            ${d.schedule.map(s => `<td style="color:${s==='●'?'var(--success)':'var(--text-muted)'};">${s}</td>`).join('')}
+            <td>${d.rotDays}</td><td>${fmt(d.final_target/Math.max(1,d.rotDays),1)}</td></tr>`).join('')}
+        </tbody></table></div></div></div>
+        <div class="panel"><div class="panel-header"><h3>每日负荷分布</h3></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>日期</th><th>参与区县</th><th>当日负荷(MW)</th><th>占比</th><th>等级</th></tr></thead><tbody>
+          ${Array.from({length:days},(_,i)=>{
+            let load = 0, cnt = 0;
+            this.districts.forEach(d => { if (d.schedule[i] === '●') { load += d.final_target; cnt++; } });
+            const ratio = load / (parseFloat(this.params['全域削峰总目标'].value)||256.4);
+            const level = ratio > 1.1 ? '高强度' : ratio > 0.8 ? '常规' : '低强度';
+            return `<tr><td>第${i+1}天</td><td>${cnt}</td><td>${fmt(load,1)}</td><td>${fmt(ratio*100,1)}%</td>
+              <td><span class="badge ${ratio>1.1?'badge-red':ratio>0.8?'badge-green':'badge-yellow'}">${level}</span></td></tr>`;
+          }).join('')}
+        </tbody></table></div></div></div>`;
+    } else if (this.tab === 'final') {
+      const grandTotal = this.districts.reduce((s,d) => s + d.final_target, 0);
+      const target=parseFloat(this.params['全域削峰总目标'].value)||0;
+      const gap=Math.max(0,target-grandTotal);
+      const schemeName=this.selectedScheme==='second'?'方案A · 全域二次下发':'方案B · 分区轮调互济';
+      body.innerHTML = `<div class="info-box">当前采用“${schemeName}”，最终任务合计 ${fmt(grandTotal,2)} MW，剩余缺口 ${fmt(gap,2)} MW。此表只呈现被选方案，不叠加另一方案。</div><div class="panel"><div class="panel-header"><h3>区县最终任务</h3><span style="font-size:11px;color:var(--text-muted);">${schemeName}</span></div>
+        <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
+          <th>#</th><th>区县</th><th>梯队</th><th>片区</th><th>中性潜力</th><th>安全上限</th><th>初次目标</th><th>调整量</th><th>最终任务</th><th>利用率</th><th>合规</th></tr></thead><tbody>
+          ${this.districts.map(d => `<tr><td>${d.seq}</td><td style="text-align:left"><strong>${d.name}</strong></td><td>${d.tier}</td><td>${d.group}</td>
+            <td>${fmt(d.potential,1)}</td><td>${fmt(d.max_adjustable,2)}</td><td>${fmt(d.initial_target,2)}</td>
+            <td style="color:${d.final_adjustment>0?'var(--success)':d.final_adjustment<0?'var(--danger)':'var(--text-muted)'};">${fmt(d.final_adjustment,2)}</td>
+            <td style="font-weight:600;color:var(--warning);">${fmt(d.final_target,2)}</td>
+            <td>${fmt(d.load_utilization*100,1)}%</td>
+            <td><span class="badge ${d.compliance==='合规'?'badge-green':'badge-red'}">${d.compliance}</span></td></tr>`).join('')}
+        </tbody></table></div></div></div>`;
+    } else if (this.tab === 'stat') {
+      const tierGroups = {};
+      this.districts.forEach(d => { (tierGroups[d.tier] = tierGroups[d.tier] || {count:0,pot:0,target:0}).count++; tierGroups[d.tier].pot += d.potential; tierGroups[d.tier].target += d.final_target; });
+      const tierOrder = ['第一梯队','第二梯队','第三梯队','第四梯队','第五梯队'];
+      const tierNames = { '第一梯队':'核心城区','第二梯队':'一般城区','第三梯队':'主城新区','第四梯队':'区域中心','第五梯队':'普通县域' };
+      const groupStats = {};
+      this.districts.forEach(d => { (groupStats[d.group] = groupStats[d.group] || {count:0,pot:0,target:0,surplus:0,deficit:0}).count++; groupStats[d.group].pot += d.potential; groupStats[d.group].target += d.final_target; if (d.deviation<-0.5) groupStats[d.group].surplus += Math.abs(d.deviation); if (d.deviation>0.5) groupStats[d.group].deficit += d.deviation; });
+      body.innerHTML = `
+      <div class="grid-2">
+        <div class="panel"><div class="panel-header"><h3>分能级梯队汇总</h3></div>
+          <div class="panel-body"><table class="data-table"><thead><tr><th>梯队</th><th>区县数</th><th>潜力(MW)</th><th>承担目标(MW)</th><th>贡献占比</th></tr></thead><tbody>
+          ${tierOrder.map(t => { const g = tierGroups[t]; if (!g) return ''; const grand = this.districts.reduce((s,d)=>s+d.final_target,0); return `<tr><td style="text-align:left"><strong>${t}（${tierNames[t]}）</strong></td><td>${g.count}</td><td>${fmt(g.pot,1)}</td><td>${fmt(g.target,2)}</td><td>${fmt(g.target/grand*100,1)}%</td></tr>`; }).join('')}
+          <tr style="background:var(--bg-panel);"><td><strong>全市合计</strong></td><td>38</td><td>${fmt(this.districts.reduce((s,d)=>s+d.potential,0),1)}</td><td>${fmt(this.districts.reduce((s,d)=>s+d.final_target,0),2)}</td><td>100%</td></tr>
+          </tbody></table></div></div>
+        <div class="panel"><div class="panel-header"><h3>分互济片区汇总</h3></div>
+          <div class="panel-body"><table class="data-table"><thead><tr><th>片区</th><th>区县数</th><th>潜力(MW)</th><th>承担目标(MW)</th><th>富余</th><th>缺口</th><th>净流向</th></tr></thead><tbody>
+          ${['主城都市区','渝东北三峡库区','渝东南武陵山区'].map(g => { const d = groupStats[g]; if (!d) return ''; const net = d.surplus - d.deficit; return `<tr><td style="text-align:left"><strong>${g}</strong></td><td>${d.count}</td><td>${fmt(d.pot,1)}</td><td>${fmt(d.target,1)}</td><td>${fmt(d.surplus,1)}</td><td>${fmt(d.deficit,1)}</td><td><span class="badge ${net>0?'badge-green':net<0?'badge-red':'badge-yellow'}">${net>0?'净输出 '+fmt(net,1)+'MW':net<0?'净接收 '+fmt(Math.abs(net),1)+'MW':'平衡'}</span></td></tr>`; }).join('')}
+          </tbody></table></div></div>
+      </div>`;
+    }
+  },
+  setParam(el) {
+    const key = el.dataset.param;
+    this.params[key].value = parseFloat(el.value) || 0;
+    if (key === '全域削峰总目标' && typeof CityPotential !== 'undefined') {
+      const valEl = document.getElementById('cityDispatch20Val');
+      if (valEl) valEl.textContent = fmt(this.params[key].value, 1);
+    }
+    this.compute(); this.renderTab();
+    showToast(`参数已更新：${key} = ${el.value}`);
+  },
+  exportCSV() {
+    let csv = '\ufeff序号,区县,梯队,片区,中性潜力MW,历史响应率,初次目标MW,初次可执行MW,初次缺口MW,方案A追加MW,方案A最终MW,方案B片区内承接MW,方案B跨片区承接MW,方案B最终MW,采用方案,最终任务MW,调整量MW,利用率,合规\n';
+    const scheme=this.selectedScheme==='second'?'方案A-全域二次下发':'方案B-分区轮调互济';
+    this.districts.forEach(d => { csv += [d.seq,d.name,d.tier,d.group,fmt(d.potential,2),fmt(d.history_rate,2),fmt(d.initial_target,2),fmt(d.first_dispatch,2),fmt(d.first_unmet,2),fmt(d.second_dispatch,2),fmt(d.second_final,2),fmt(d.intra_group_aid,2),fmt(d.cross_group_aid,2),fmt(d.mutual_final,2),scheme,fmt(d.final_target,2),fmt(d.final_adjustment,2),fmt(d.load_utilization*100,1)+'%',d.compliance].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n'; });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+    a.download = '区县可调潜力分配_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
+    showToast('区县分配结果已导出');
+  }
+};
+
+/* ============================================================
+   模块八：全市可调潜力推算（台账外推）
+   样本台账 → 业态标杆 → 区县修正（覆盖率×衰减）→ 户当量扩容 → 全市汇总
+============================================================ */
+const CITY_BENCHMARKS=[
+  {category:'党政机关',samples:10,benchmark:443.47,calcBenchmark:443.5},
+  {category:'企事业单位',samples:10,benchmark:442.46,calcBenchmark:442.5},
+  {category:'办公写字楼',samples:10,benchmark:619.7,calcBenchmark:619.7},
+  {category:'商业综合体',samples:10,benchmark:1084.26,calcBenchmark:1084.3},
+  {category:'酒店',samples:10,benchmark:379.77,calcBenchmark:379.8},
+  {category:'商超',samples:11,benchmark:310.05,calcBenchmark:277.1}
+];
+const CITY_TIER_FACTORS={
+  '第一梯队':{coverage:0.68,decay:0.48,shares:{'党政机关':0.08,'企事业单位':0.14,'办公写字楼':0.28,'商业综合体':0.24,'酒店':0.16,'商超':0.10}},
+  '第二梯队':{coverage:0.62,decay:0.43,shares:{'党政机关':0.10,'企事业单位':0.18,'办公写字楼':0.22,'商业综合体':0.22,'酒店':0.14,'商超':0.14}},
+  '第三梯队':{coverage:0.55,decay:0.40,shares:{'党政机关':0.12,'企事业单位':0.20,'办公写字楼':0.16,'商业综合体':0.22,'酒店':0.14,'商超':0.16}},
+  '第四梯队':{coverage:0.48,decay:0.36,shares:{'党政机关':0.12,'企事业单位':0.16,'办公写字楼':0.12,'商业综合体':0.24,'酒店':0.18,'商超':0.18}},
+  '第五梯队':{coverage:0.38,decay:0.30,shares:{'党政机关':0.18,'企事业单位':0.16,'办公写字楼':0.08,'商业综合体':0.18,'酒店':0.18,'商超':0.22}}
+};
+const CITY_DISTRICTS=[
+  {district:'渝中区',tier:'第一梯队',economy:1150,householdEquivalent:632.5,neutral:127926.74,conservative:84431.65,dispatch20:25585.35},
+  {district:'江北区',tier:'第一梯队',economy:1050,householdEquivalent:577.5,neutral:116802.68,conservative:77089.77,dispatch20:23360.54},
+  {district:'渝北区',tier:'第一梯队',economy:1450,householdEquivalent:797.5,neutral:161298.94,conservative:106457.30,dispatch20:32259.79},
+  {district:'九龙坡区',tier:'第二梯队',economy:980,householdEquivalent:539,neutral:84903.03,conservative:56036.00,dispatch20:16980.61},
+  {district:'南岸区',tier:'第二梯队',economy:760,householdEquivalent:418,neutral:65843.17,conservative:43456.49,dispatch20:13168.63},
+  {district:'沙坪坝区',tier:'第二梯队',economy:820,householdEquivalent:451,neutral:71041.31,conservative:46887.27,dispatch20:14208.26},
+  {district:'大渡口区',tier:'第二梯队',economy:300,householdEquivalent:165,neutral:25990.72,conservative:17153.88,dispatch20:5198.14},
+  {district:'北碚区',tier:'第二梯队',economy:430,householdEquivalent:236.5,neutral:37253.37,conservative:24587.23,dispatch20:7450.67},
+  {district:'巴南区',tier:'第二梯队',economy:560,householdEquivalent:308,neutral:48516.02,conservative:32020.57,dispatch20:9703.20},
+  {district:'涪陵区',tier:'第三梯队',economy:620,householdEquivalent:341,neutral:43280.99,conservative:28565.45,dispatch20:8656.20},
+  {district:'江津区',tier:'第三梯队',economy:560,householdEquivalent:308,neutral:39092.51,conservative:25801.05,dispatch20:7818.50},
+  {district:'合川区',tier:'第三梯队',economy:480,householdEquivalent:264,neutral:33507.86,conservative:22115.19,dispatch20:6701.57},
+  {district:'永川区',tier:'第三梯队',economy:620,householdEquivalent:341,neutral:43280.99,conservative:28565.45,dispatch20:8656.20},
+  {district:'璧山区',tier:'第三梯队',economy:450,householdEquivalent:247.5,neutral:31413.62,conservative:20732.99,dispatch20:6282.72},
+  {district:'长寿区',tier:'第三梯队',economy:430,householdEquivalent:236.5,neutral:30017.46,conservative:19811.52,dispatch20:6003.49},
+  {district:'大足区',tier:'第三梯队',economy:400,householdEquivalent:220,neutral:27923.22,conservative:18429.32,dispatch20:5584.64},
+  {district:'綦江区',tier:'第三梯队',economy:380,householdEquivalent:209,neutral:26527.06,conservative:17507.86,dispatch20:5305.41},
+  {district:'铜梁区',tier:'第三梯队',economy:400,householdEquivalent:220,neutral:27923.22,conservative:18429.32,dispatch20:5584.64},
+  {district:'荣昌区',tier:'第三梯队',economy:360,householdEquivalent:198,neutral:25130.90,conservative:16586.39,dispatch20:5026.18},
+  {district:'南川区',tier:'第三梯队',economy:300,householdEquivalent:165,neutral:20942.41,conservative:13821.99,dispatch20:4188.48},
+  {district:'潼南区',tier:'第三梯队',economy:300,householdEquivalent:165,neutral:20942.41,conservative:13821.99,dispatch20:4188.48},
+  {district:'万州区',tier:'第四梯队',economy:720,householdEquivalent:396,neutral:39473.70,conservative:26052.64,dispatch20:7894.74},
+  {district:'黔江区',tier:'第四梯队',economy:220,householdEquivalent:121,neutral:12061.41,conservative:7960.53,dispatch20:2412.28},
+  {district:'开州区',tier:'第四梯队',economy:430,householdEquivalent:236.5,neutral:23574.57,conservative:15559.22,dispatch20:4714.91},
+  {district:'梁平区',tier:'第五梯队',economy:280,householdEquivalent:154,neutral:9211.74,conservative:6079.75,dispatch20:1842.35},
+  {district:'丰都县',tier:'第五梯队',economy:230,householdEquivalent:126.5,neutral:7566.79,conservative:4994.08,dispatch20:1513.36},
+  {district:'垫江县',tier:'第五梯队',economy:260,householdEquivalent:143,neutral:8553.76,conservative:5645.48,dispatch20:1710.75},
+  {district:'忠县',tier:'第五梯队',economy:250,householdEquivalent:137.5,neutral:8224.77,conservative:5428.35,dispatch20:1644.95},
+  {district:'云阳县',tier:'第五梯队',economy:280,householdEquivalent:154,neutral:9211.74,conservative:6079.75,dispatch20:1842.35},
+  {district:'奉节县',tier:'第五梯队',economy:260,householdEquivalent:143,neutral:8553.76,conservative:5645.48,dispatch20:1710.75},
+  {district:'巫山县',tier:'第五梯队',economy:180,householdEquivalent:99,neutral:5921.83,conservative:3908.41,dispatch20:1184.37},
+  {district:'巫溪县',tier:'第五梯队',economy:130,householdEquivalent:71.5,neutral:4276.88,conservative:2822.74,dispatch20:855.38},
+  {district:'城口县',tier:'第五梯队',economy:90,householdEquivalent:49.5,neutral:2960.92,conservative:1954.20,dispatch20:592.18},
+  {district:'秀山县',tier:'第五梯队',economy:230,householdEquivalent:126.5,neutral:7566.79,conservative:4994.08,dispatch20:1513.36},
+  {district:'石柱县',tier:'第五梯队',economy:190,householdEquivalent:104.5,neutral:6250.82,conservative:4125.54,dispatch20:1250.16},
+  {district:'彭水县',tier:'第五梯队',economy:200,householdEquivalent:110,neutral:6579.81,conservative:4342.68,dispatch20:1315.96},
+  {district:'酉阳县',tier:'第五梯队',economy:200,householdEquivalent:110,neutral:6579.81,conservative:4342.68,dispatch20:1315.96},
+  {district:'武隆区',tier:'第五梯队',economy:180,householdEquivalent:99,neutral:5921.83,conservative:3908.41,dispatch20:1184.37}
+];
+const ParameterCatalog={
+  rows(){
+    const rows=CITY_BENCHMARKS.map(b=>({name:`${b.category}单户标杆`,symbol:'P̄c',value:b.calcBenchmark,unit:'kW/户',model:'全市潜力外推',source:b.category==='商超'?'实测样本分类汇总后按统一汇总口径校准':'61户实测样本分类均值',status:b.category==='商超'?'口径校准':'实测计算'}));
+    Object.entries(CITY_TIER_FACTORS).forEach(([tier,f])=>{
+      rows.push({name:`${tier}覆盖率`,symbol:'Ck',value:f.coverage,unit:'比例',model:'区县分层修正',source:'按城市能级与可接入覆盖范围设置',status:'工程参数·待校准'});
+      rows.push({name:`${tier}衰减系数`,symbol:'Dk',value:f.decay,unit:'比例',model:'区县分层修正',source:'考虑样本外推、设备差异和响应折减',status:'工程参数·待校准'});
+      rows.push({name:`${tier}业态结构`,symbol:'Sk,c',value:Object.entries(f.shares).map(([k,v])=>`${k}${Math.round(v*100)}%`).join(' / '),unit:'',model:'业态户当量分配',source:'梯队建筑结构假设，六类占比合计100%',status:'结构假设·待校准'});
+    });
+    rows.push(
+      {name:'经济量转楼宇户当量系数',symbol:'η',value:0.55,unit:'户当量/亿元',model:'区县规模折算',source:'当前规划折算口径',status:'工程参数·待校准'},
+      {name:'保守情景系数',symbol:'Ks',value:0.66,unit:'比例',model:'全市保守潜力',source:'中性结果的安全折减口径',status:'情景参数'},
+      {name:'峰时可下发比例',symbol:'Kd',value:CityPotential.dispatchRatio,unit:'比例',model:'区县任务来源',source:'页面可调参数；默认20%',status:'用户可调'},
+      ...Object.entries(DistrictAlloc.params).filter(([k])=>k!=='全域削峰总目标').map(([name,p])=>({name,symbol:name.includes('ω')?name.match(/ω./)?.[0]||'ω':'K',value:p.value,unit:p.unit,model:'区县任务分配',source:p.desc||'区县分配规则',status:'工程参数·待校准'})),
+      ...Object.entries(Aggregate.synergyParams).map(([name,p])=>({name,symbol:'K',value:p.value,unit:p.unit,model:'楼宇协同分配',source:p.desc,status:'策略参数'})),
+      {name:'冷水机组恢复反弹率',symbol:'Kr',value:0.10,unit:'比例',model:'单体执行仿真',source:'确定性仿真假设',status:'仿真参数·待实测'},
+      {name:'多联机恢复反弹率',symbol:'Kr',value:0.06,unit:'比例',model:'单体执行仿真',source:'确定性仿真假设',status:'仿真参数·待实测'}
+    );
+    return rows;
+  },
+  badge(status){return status.includes('实测')?'badge-green':status.includes('用户')?'badge-blue':status.includes('校准')?'badge-purple':'badge-orange';},
+  render(){const rows=this.rows();return `<details class="calc-logic"><summary>🧾 模型参数来源与口径 <span class="calc-hint">${rows.length}项 · 结果 → 公式 → 参数 → 来源可追溯</span></summary><div class="calc-body"><div class="info-box"><strong>状态说明：</strong>“实测计算”来自现有样本；“口径校准”用于保持统一汇总结果；“工程参数/结构假设”尚无真实数据支撑，需在后续接入数据后校准；“用户可调”会立即联动下游结果。</div><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>参数</th><th>符号</th><th>当前值</th><th>适用环节</th><th>来源与口径</th><th>状态</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="text-align:left"><strong>${r.name}</strong></td><td>${r.symbol}</td><td>${typeof r.value==='number'?fmt(r.value,3):r.value}${r.unit?' '+r.unit:''}</td><td>${r.model}</td><td style="text-align:left">${r.source}</td><td><span class="badge ${this.badge(r.status)}">${r.status}</span></td></tr>`).join('')}</tbody></table></div></div></details>`;},
+  csv(){return '\n模型参数来源与口径\n参数,符号,当前值,单位,适用环节,来源与口径,状态\n'+this.rows().map(r=>[r.name,r.symbol,r.value,r.unit,r.model,r.source,r.status].map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')).join('\n')+'\n';}
+};
+const CityPotential={
+  tab:'districts',tier:'全部',district:'全部',
+  mode:'standard',
+  dispatchRatio:0.2,
+  dispatchOverride:null,
+  sensitivity:{scale:1,coverage:1,decay:1,conservative:0.66,dispatch:0.20},
+  categories:['党政机关','企事业单位','办公写字楼','商业综合体','酒店','商超'],
+  mw(v){return v/1000;},
+  scenarioFactor(){
+    const base=BUILDINGS.reduce((s,b)=>s+b.sourcePotential,0);
+    const offsetArg=Ledger.tempMode==='building'?'按楼宇配置':Ledger.tempOffset;
+    const current=PotentialEngine.calcAll(BUILDINGS,Ledger.outdoorTemp,null,Ledger.incentive,offsetArg).reduce((s,r)=>s+r.potential,0);
+    return base>0?current/base:1;
+  },
+  standardCheck(){
+    const total=this.totals(CITY_DISTRICTS);
+    const expected={neutral:1282049.5485314,conservative:846152.702030724,dispatch20:256409.90970628};
+    return{pass:Math.abs(total.neutral-expected.neutral)<50&&Math.abs(total.conservative-expected.conservative)<50&&Math.abs(CITY_DISTRICTS.reduce((s,d)=>s+d.dispatch20,0)-expected.dispatch20)<50,expected};
+  },
+  benchmarks(){
+    if(this.mode==='standard')return CITY_BENCHMARKS;
+    const factor=this.scenarioFactor();
+    return CITY_BENCHMARKS.map(b=>({...b,benchmark:b.benchmark*factor,calcBenchmark:b.calcBenchmark*factor}));
+  },
+  districtRows(){
+    if(this.mode==='standard')return CITY_DISTRICTS;
+    const factor=this.scenarioFactor();
+    return CITY_DISTRICTS.map(d=>({...d,neutral:d.neutral*factor,conservative:d.conservative*factor,dispatch20:d.neutral*factor*this.dispatchRatio}));
+  },
+  totals(rows){
+    rows=rows||this.districtRows();
+    const neutral=rows.reduce((s,d)=>s+d.neutral,0);
+    const calcDispatch=neutral*this.dispatchRatio;
+    return{neutral,conservative:rows.reduce((s,d)=>s+d.conservative,0),
+      dispatch20:this.dispatchOverride!==null?this.dispatchOverride*1000:calcDispatch,
+      householdEquivalent:rows.reduce((s,d)=>s+d.householdEquivalent,0)};
+  },
+  processRows(){
+    const benchmarks=this.benchmarks();
+    return this.districtRows().flatMap(d=>{
+      const factor=CITY_TIER_FACTORS[d.tier];
+      return this.categories.map(category=>{
+        const b=benchmarks.find(x=>x.category===category);
+        const corrected=b.calcBenchmark*factor.coverage*factor.decay;
+        const equivalent=d.householdEquivalent*factor.shares[category];
+        return{...d,category,benchmark:b.calcBenchmark,samples:b.samples,coverage:factor.coverage,decay:factor.decay,corrected,equivalent,potential:corrected*equivalent};
+      });
+    });
+  },
+  filteredDistricts(){return this.districtRows().filter(d=>this.tier==='全部'||d.tier===this.tier);},
+  filteredProcessRows(){return this.processRows().filter(r=>(this.tier==='全部'||r.tier===this.tier)&&(this.district==='全部'||r.district===this.district));},
+  sensitivityTotals(){const base=this.totals(CITY_DISTRICTS).neutral;const s=this.sensitivity;const neutral=base*s.scale*s.coverage*s.decay;return{base,neutral,conservative:neutral*s.conservative,dispatch:neutral*s.dispatch};},
+  setSensitivity(key,value){value=parseFloat(value);if(!Number.isFinite(value)||value<=0){showToast('请输入有效参数');return;}this.sensitivity[key]=value;this.render();},
+  resetSensitivity(){this.sensitivity={scale:1,coverage:1,decay:1,conservative:0.66,dispatch:0.20};this.render();showToast('敏感性参数已恢复基准');},
+  sensitivityView(){const s=this.sensitivity,t=this.sensitivityTotals(),pct=(v,b)=>`${v>=b?'+':''}${fmt((v/b-1)*100,1)}%`;const controls=[['scale','楼宇规模系数',s.scale,'影响户当量'],['coverage','覆盖率倍率',s.coverage,'影响可接入范围'],['decay','衰减系数倍率',s.decay,'影响响应折减'],['conservative','保守情景系数',s.conservative,'仅影响保守结果'],['dispatch','可下发比例',s.dispatch,'仅影响可下发结果']];return `<details class="calc-logic"><summary>📊 全市潜力敏感性分析 <span class="calc-hint">调整关键假设，查看结果变化；不覆盖标准口径</span></summary><div class="calc-body"><div class="info-box"><strong>用途：</strong>回答“某个参数变化后结果会变多少”。这里单独形成情景结果，不改动标准汇总，也不把工程假设包装成实测结论。</div><div class="form-row">${controls.map(([k,n,v,h])=>`<div class="form-group"><label>${n}</label><input class="form-input" type="number" min="0.1" max="2" step="0.01" value="${v}" onchange="CityPotential.setSensitivity('${k}',this.value)"><span style="font-size:11px;color:var(--text-muted)">${h}</span></div>`).join('')}<button class="btn btn-outline btn-sm" onclick="CityPotential.resetSensitivity()">恢复基准</button></div><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>结果</th><th>标准口径(MW)</th><th>敏感性情景(MW)</th><th>变化</th><th>主要驱动</th></tr></thead><tbody><tr><td>中性潜力</td><td>${fmt(this.mw(t.base),1)}</td><td>${fmt(this.mw(t.neutral),1)}</td><td>${pct(t.neutral,t.base)}</td><td>规模 × 覆盖率 × 衰减</td></tr><tr><td>保守潜力</td><td>${fmt(this.mw(t.base*.66),1)}</td><td>${fmt(this.mw(t.conservative),1)}</td><td>${pct(t.conservative,t.base*.66)}</td><td>中性潜力 × 保守系数</td></tr><tr><td>可下发量</td><td>${fmt(this.mw(t.base*.20),1)}</td><td>${fmt(this.mw(t.dispatch),1)}</td><td>${pct(t.dispatch,t.base*.20)}</td><td>中性潜力 × 可下发比例</td></tr></tbody></table></div><div class="calc-note">线性模型下，规模、覆盖率、衰减分别变化10%，中性潜力也分别变化10%；它们同时变化时按乘法叠加。该分析用于边界判断，不代表统计置信区间。</div></div></details>`;},
+  render(){
+    const el=document.getElementById('page-citypotential');
+    const districts=this.districtRows();
+    const benchmarks=this.benchmarks();
+    const total=this.totals();
+    const standardQuality=this.standardCheck();
+    // 双向绑定：全市推算的20%可下发量自动同步到区县分配的全域削峰总目标
+    const dispatchVal=parseFloat(fmt(this.mw(total.dispatch20),1));
+    if(typeof DistrictAlloc!=='undefined'&&DistrictAlloc.params){
+      DistrictAlloc.params['全域削峰总目标'].value=dispatchVal;
+      if(DistrictAlloc.inited)DistrictAlloc.compute();
+    }
+    const sorted=[...districts].sort((a,b)=>b.neutral-a.neutral);
+    const topDistrict=sorted[0];
+    const maxNeutral=topDistrict.neutral;
+    const sampleTotal=benchmarks.reduce((s,i)=>s+i.samples,0);
+    const samplePotential=BUILDINGS.reduce((s,b)=>s+b.sourcePotential,0);
+    const expansion=samplePotential>0?total.neutral/samplePotential:0;
+    const scenarioFactor=this.scenarioFactor();
+    const topBars=sorted.slice(0,10).map(d=>`<div class="rank-bar"><div class="rank-bar-name" title="${d.district}">${d.district}</div><div class="rank-bar-track"><div class="rank-bar-fill" style="width:${Math.max(3,d.neutral/maxNeutral*100)}%"></div></div><div class="rank-bar-val">${fmt(this.mw(d.neutral),1)} MW</div></div>`).join('');
+    const benchmarkRows=benchmarks.map(b=>`<tr><td style="text-align:left"><strong>${b.category}</strong></td><td>${b.samples}</td><td>${fmt(b.benchmark,2)}</td><td>${fmt(b.calcBenchmark,1)}</td></tr>`).join('');
+    el.innerHTML=`
+    <div class="page-header">
+      <div><h2>全市可调潜力推算</h2><div class="breadcrumb">总览 / 用户样本外推 / 重庆市 38 区县</div></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="form-select" style="width:150px;padding:6px 10px" onchange="CityPotential.setMode(this.value)">
+          <option value="standard" ${this.mode==='standard'?'selected':''}>标准口径</option>
+          <option value="realtime" ${this.mode==='realtime'?'selected':''}>实时情景</option>
+        </select>
+        <span class="badge badge-blue">${this.mode==='standard'?'规划标杆结果':'台账参数联动'}</span>
+        <span class="badge ${standardQuality.pass?'badge-green':'badge-red'}">${standardQuality.pass?'标准结果已核验':'标准结果异常'}</span>
+        <button class="btn btn-outline btn-sm" onclick="CityPotential.exportCSV()">📥 导出</button>
+      </div>
+    </div>
+    <div class="info-box">📈 ${this.mode==='standard'
+      ?'<strong>标准口径：</strong>采用校准后的六类业态标杆，结果用于规划展示和统一对照。'
+      :`<strong>实时情景：</strong>以标准全市规模为基准，乘逐户参数形成的情景系数 ${fmt(scenarioFactor,3)}（室外温度 ${Ledger.outdoorTemp}℃、${Ledger.incentive}、${Ledger.tempMode==='building'?'逐户温度上调':'统一覆盖 '+Ledger.tempOffset+'℃'}）。`} 台账筛选条件仅影响查看范围，不改变全市规模；标准口径始终保留统一核验结果。</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-icon blue">🏢</div><div class="stat-value">${sampleTotal}</div><div class="stat-label">实测样本 (户)</div><div class="stat-change up">样本潜力 ${fmt(this.mw(samplePotential),1)} MW · 全市约 ${fmt(expansion,1)} 倍</div></div>
+      <div class="stat-card"><div class="stat-icon purple">📉</div><div class="stat-value">${fmt(this.mw(total.neutral),1)}</div><div class="stat-label">全市中性潜力 (MW)</div><div class="stat-change up">38 区县合计</div></div>
+      <div class="stat-card"><div class="stat-icon cyan">🛡️</div><div class="stat-value">${fmt(this.mw(total.conservative),1)}</div><div class="stat-label">全市保守潜力 (MW)</div><div class="stat-change up">中性情景 × 0.66</div></div>
+      <div class="stat-card"><div class="stat-icon orange">🎯</div><div class="stat-value" id="cityDispatch20Val">${fmt(this.mw(total.dispatch20),1)}</div><div class="stat-label">可下发量 (MW)</div><div class="stat-change up">峰时调控口径</div>
+        <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+          <input type="number" class="form-input" style="width:60px;font-size:12px;padding:4px 6px" value="${Math.round(this.dispatchRatio*100)}" min="5" max="50" step="1" onchange="CityPotential.setDispatchRatio(this.value)" title="调节比例"><span style="font-size:11px;color:var(--text-muted)">%</span>
+          <input type="number" class="form-input" style="width:80px;font-size:12px;padding:4px 6px" value="${fmt(this.mw(total.dispatch20),1)}" step="0.1" onchange="CityPotential.setDispatchValue(this.value)" title="直接修改数值"><span style="font-size:11px;color:var(--text-muted)">MW</span>
+        </div></div>
+    </div>
+    <details class="calc-logic" open>
+      <summary>📘 推算逻辑说明 <span class="calc-hint">点开查看从用户到全市的公式链路</span></summary>
+      <div class="calc-body">
+        <p><b>总原则：</b>不是把 ${sampleTotal} 户样本简单放大，而是先按六类业态提取“单户可调潜力标杆”，再根据不同区县的城市能级、覆盖率和负荷衰减程度做分层外推。</p>
+        <div class="formula-box">业态标杆 P̄c = 有效样本中同业态用户可调潜力均值</div>
+        <div class="formula-box">修正单户潜力 Pm,c = P̄c × 覆盖率 Ck × 衰减系数 Dk</div>
+        <div class="formula-box">分业态潜力 ΔPm,c = Pm,c × 楼宇户当量 Nm,c；区县潜力 ΔPm = Σc ΔPm,c</div>
+        <div class="formula-box">全市中性潜力 = Σ38区县 ΔPm；保守潜力 = 中性潜力 × 0.66；可下发量 = 中性潜力 × ${Math.round(this.dispatchRatio*100)}%（比例可在上方卡片调整）</div>
+        <div class="calc-note green">💡 例：渝北区属于第一梯队，覆盖率 0.68、衰减系数 0.48，商业综合体标杆 1084.3 kW 修正为 353.92 kW/户，再乘以商业综合体户当量 191.4 户，得到约 67.74 MW 分业态潜力。</div>
+        <div class="calc-note">📌 数据口径：基于 61 户有效实测样本及 38 个区县分层测算参数，形成全市中性、保守和可下发潜力结果。</div>
+      </div>
+    </details>
+    ${ParameterCatalog.render()}
+    ${this.sensitivityView()}
+    <div class="flow-grid">
+      <div class="flow-step"><div class="num">1</div><h4>样本台账归类</h4><p>把实测用户按党政机关、企事业单位、办公写字楼、商业综合体、酒店、商超六类归并。</p></div>
+      <div class="flow-step"><div class="num">2</div><h4>提取单户标杆</h4><p>用同类有效样本的可调潜力均值形成 P̄c，作为全市外推标杆。</p></div>
+      <div class="flow-step"><div class="num">3</div><h4>区县分层修正</h4><p>按五个梯队配置覆盖率 Ck 和衰减系数 Dk，体现城区密度、接入条件和响应折减。</p></div>
+      <div class="flow-step"><div class="num">4</div><h4>户当量扩容</h4><p>把区县经济量折算成总楼宇户当量，再按梯队业态结构分配到六类建筑。</p></div>
+      <div class="flow-step"><div class="num">5</div><h4>全域汇总</h4><p>逐区县、逐业态求和，形成中性、保守和 20% 可下发三种结果。</p></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel"><div class="panel-header"><h3>六类业态单户标杆</h3><span style="font-size:11px;color:var(--text-muted)">实测台账 / 过程表</span></div>
+        <div class="panel-body"><table class="data-table"><thead><tr><th>业态</th><th>样本户数</th><th>样本潜力均值(kW)</th><th>测算采用值(kW)</th></tr></thead><tbody>${benchmarkRows}</tbody></table></div></div>
+      <div class="panel"><div class="panel-header"><h3>区县中性潜力 TOP10</h3><span style="font-size:11px;color:var(--text-muted)">最高：${topDistrict.district} ${fmt(this.mw(topDistrict.neutral),1)} MW</span></div>
+        <div class="panel-body">${topBars}</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>测算结果与过程追溯</h3>
+        <div class="tabs" style="margin:0">
+          ${[['districts','区县结果'],['tiers','梯队汇总'],['process','过程明细']].map(([k,l])=>`<button class="tab-btn ${this.tab===k?'active':''}" onclick="CityPotential.switchTab('${k}')">${l}</button>`).join('')}
+        </div></div>
+      <div class="panel-body">
+        <div class="form-row" style="margin-bottom:12px">
+          <div class="form-group"><label>梯队筛选</label><select class="form-select" onchange="CityPotential.setTier(this.value)">
+            ${['全部','第一梯队','第二梯队','第三梯队','第四梯队','第五梯队'].map(t=>`<option ${this.tier===t?'selected':''}>${t}</option>`).join('')}</select></div>
+          <div class="form-group"><label>区县筛选（过程明细）</label><select class="form-select" onchange="CityPotential.setDistrict(this.value)">
+            ${['全部',...CITY_DISTRICTS.map(d=>d.district)].map(d=>`<option ${this.district===d?'selected':''}>${d}</option>`).join('')}</select></div>
+        </div>
+        <div id="cityPotentialTab"></div>
+      </div>
+    </div>`;
+    this.renderTab();
+  },
+  switchTab(tab){this.tab=tab;this.render();},
+  setMode(mode){this.mode=mode;this.dispatchOverride=null;this.render();showToast(mode==='standard'?'已切换至标准口径':'已联动楼宇台账当前情景');},
+  setTier(tier){this.tier=tier;this.render();},
+  setDistrict(district){this.district=district;this.render();},
+  renderTab(){
+    const body=document.getElementById('cityPotentialTab');
+    if(!body)return;
+    if(this.tab==='districts'){
+      const rows=this.filteredDistricts().sort((a,b)=>b.neutral-a.neutral);
+      const total=this.totals(rows);
+      const grand=this.totals();
+      body.innerHTML=`<div class="data-table-wrapper"><table class="data-table"><thead><tr>
+        <th>#</th><th>区县</th><th>梯队</th><th>经济量当量(亿元)</th><th>楼宇户当量</th><th>中性潜力(MW)</th><th>保守潜力(MW)</th><th>20%下发(MW)</th><th>全市占比</th></tr></thead><tbody>
+        ${rows.map((d,i)=>`<tr><td>${i+1}</td><td style="text-align:left"><strong>${d.district}</strong></td><td><span class="badge badge-blue">${d.tier}</span></td>
+          <td>${fmt(d.economy,0)}</td><td>${fmt(d.householdEquivalent,1)}</td><td style="color:var(--accent-cyan);font-weight:600">${fmt(this.mw(d.neutral),2)}</td>
+          <td>${fmt(this.mw(d.conservative),2)}</td><td>${fmt(this.mw(d.dispatch20),2)}</td><td>${fmt(d.neutral/grand.neutral*100,1)}%</td></tr>`).join('')}
+        <tr style="background:var(--bg-panel)"><td colspan="4"><strong>当前筛选合计</strong></td><td>${fmt(total.householdEquivalent,1)}</td><td>${fmt(this.mw(total.neutral),2)}</td><td>${fmt(this.mw(total.conservative),2)}</td><td>${fmt(this.mw(total.dispatch20),2)}</td><td>${fmt(total.neutral/grand.neutral*100,1)}%</td></tr>
+      </tbody></table></div>`;
+    }else if(this.tab==='tiers'){
+      const tiers=['第一梯队','第二梯队','第三梯队','第四梯队','第五梯队'];
+      const grand=this.totals();
+      body.innerHTML=`<div class="data-table-wrapper"><table class="data-table"><thead><tr>
+        <th>梯队</th><th>区县数</th><th>覆盖率Ck</th><th>衰减系数Dk</th><th>户当量</th><th>中性潜力(MW)</th><th>保守潜力(MW)</th><th>20%下发(MW)</th><th>贡献占比</th></tr></thead><tbody>
+        ${tiers.map(t=>{const rows=this.districtRows().filter(d=>d.tier===t);const total=this.totals(rows);const f=CITY_TIER_FACTORS[t];return`<tr>
+          <td style="text-align:left"><strong>${t}</strong></td><td>${rows.length}</td><td>${fmt(f.coverage,2)}</td><td>${fmt(f.decay,2)}</td>
+          <td>${fmt(total.householdEquivalent,1)}</td><td style="color:var(--accent-cyan);font-weight:600">${fmt(this.mw(total.neutral),2)}</td>
+          <td>${fmt(this.mw(total.conservative),2)}</td><td>${fmt(this.mw(total.dispatch20),2)}</td><td>${fmt(total.neutral/grand.neutral*100,1)}%</td></tr>`;}).join('')}
+        <tr style="background:var(--bg-panel)"><td><strong>全市合计</strong></td><td>38</td><td>-</td><td>-</td><td>${fmt(grand.householdEquivalent,1)}</td><td>${fmt(this.mw(grand.neutral),2)}</td><td>${fmt(this.mw(grand.conservative),2)}</td><td>${fmt(this.mw(grand.dispatch20),2)}</td><td>100%</td></tr>
+      </tbody></table></div>`;
+    }else{
+      const rows=this.filteredProcessRows();
+      const sum=rows.reduce((s,r)=>s+r.potential,0);
+      body.innerHTML=`<div class="info-box">当前筛选共 ${rows.length} 条过程记录，分业态中性潜力合计 <strong>${fmt(this.mw(sum),2)} MW</strong>。过程表按"测算过程明细"口径生成。</div>
+      <div class="data-table-wrapper"><table class="data-table"><thead><tr>
+        <th>区县</th><th>梯队</th><th>业态</th><th>单户标杆(kW)</th><th>覆盖率Ck</th><th>衰减Dk</th><th>修正单户(kW/户)</th><th>业态户当量</th><th>分业态潜力(MW)</th></tr></thead><tbody>
+        ${rows.map(r=>`<tr><td style="text-align:left"><strong>${r.district}</strong></td><td>${r.tier}</td><td><span class="badge badge-purple">${r.category}</span></td>
+          <td>${fmt(r.benchmark,1)}</td><td>${fmt(r.coverage,2)}</td><td>${fmt(r.decay,2)}</td><td>${fmt(r.corrected,2)}</td>
+          <td>${fmt(r.equivalent,2)}</td><td style="color:var(--accent-cyan);font-weight:600">${fmt(this.mw(r.potential),3)}</td></tr>`).join('')}
+      </tbody></table></div>`;
+    }
+  },
+  setDispatchRatio(ratioStr){
+    const ratio=parseFloat(ratioStr)/100;
+    if(isNaN(ratio)||ratio<=0||ratio>1){showToast('比例需在1%-100%之间');return;}
+    this.dispatchRatio=ratio;
+    this.dispatchOverride=null;
+    this.render();
+    showToast(`可下发比例已设为 ${Math.round(ratio*100)}%`);
+  },
+  setDispatchValue(valStr){
+    const val=parseFloat(valStr);
+    if(isNaN(val)||val<=0){showToast('请输入有效数值');return;}
+    this.dispatchOverride=val;
+    const total=this.totals();
+    const neutralMW=this.mw(total.neutral);
+    if(neutralMW>0){this.dispatchRatio=val/neutralMW;}
+    this.render();
+    showToast(`可下发量已设为 ${val} MW`);
+  },
+  exportCSV(){
+    let csv='\ufeff区县,梯队,经济量当量亿元,楼宇户当量,中性潜力MW,保守潜力MW,可下发MW\n';
+    this.districtRows().forEach(d=>{csv+=[d.district,d.tier,d.economy,d.householdEquivalent,fmt(this.mw(d.neutral),3),fmt(this.mw(d.conservative),3),fmt(this.mw(d.dispatch20),3)].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n';});
+    csv+=ParameterCatalog.csv();
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    a.download='全市可调潜力推算_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+    showToast('全市潜力推算结果已导出');
+  }
+};
+
+/* ============================================================
+   初始化
+============================================================ */
+BuildingConfigStore.load();
+buildNav();
+navigateTo('citypotential');
+</script>
+</body>
+</html>
