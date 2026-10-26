@@ -1723,9 +1723,9 @@ const DistrictAlloc = {
   selectScheme(scheme) {
     this.selectedScheme = scheme;
     this.compute();
-    this.tab = 'compare';
+    this.tab = 'final';
     this.render();
-    showToast(`已采用${scheme==='second'?'方案A：全域二次下发':'方案B：分区轮调互济'}`);
+    showToast(`已采用${scheme==='second'?'方案A：全域二次下发':'方案B：分区轮调互济'}，已跳转到最终任务`);
   },
   renderTab() {
     const body = document.getElementById('districtTabBody');
