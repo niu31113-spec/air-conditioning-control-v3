@@ -536,6 +536,41 @@ const DATA_PROFILE={
   }
 };
 /* ============================================================
+   合同交付物导出中心
+   实施方案 / 测试报告 / 总结报告 三大交付物的数据包出口
+============================================================ */
+const DeliverCenter={
+  safe(fn){try{fn()}catch(e){showToast('导出失败：'+e.message)}},
+  packs:[
+    {icon:'📐',title:'① 实施方案数据包',items:['全市可调潜力推算（38区县 · 五梯队 · 中性/保守/20%下发）','区县目标分配结果（ω权重模型 · 方案A/B对比）','楼宇台账与基准参数（61户）'],
+     fns:['CityPotential.exportCSV()','DistrictAlloc.exportCSV()','Ledger.exportCSV()']},
+    {icon:'🧪',title:'② 测试报告数据包',items:['楼宇可调潜力计算结果（含情景修正明细）','调控执行记录（先在单体执行页执行一次任务）','楼宇协同联动运行策略（先在协同页选择区县）'],
+     fns:['Ledger.exportCSV()','SingleExecution.exportRecord()','Aggregate.exportAll()']},
+    {icon:'📑',title:'③ 总结报告数据包',items:['问卷调查汇总（每类≥10户 · TSV · 激励意愿）','全市/区县潜力推算结果','楼宇协同策略执行结果'],
+     fns:['SurveyModule.exportCsv()','CityPotential.exportCSV()','Aggregate.exportAll()']}
+  ],
+  render(){
+    const chk=DATA_PROFILE.validate();
+    return `<details class="calc-logic" style="margin-top:16px">
+      <summary>📦 合同交付物导出中心 <span class="calc-hint">实施方案 / 测试报告 / 总结报告 数据包一键导出</span></summary>
+      <div class="calc-body">
+        <div class="info-box ${chk.pass?'green':'warning'}" style="margin-bottom:12px">${chk.pass?'✅':'⚠️'} 数据完整性校验：${chk.actual.count} 户 · 基准负荷 ${fmt(chk.actual.baseLoad,2)} kW · 可调潜力 ${fmt(chk.actual.sourcePotential,2)} kW${chk.pass?' — 与统一业务口径一致':' — 与统一口径不一致，导出前请核查'}。所有导出为 UTF-8 BOM CSV，可直接用 Excel 打开并粘贴进对应报告章节。</div>
+        <div class="grid-3">
+          ${this.packs.map(p=>`<div class="panel" style="margin:0">
+            <div class="panel-header"><h3 style="font-size:14px">${p.icon} ${p.title}</h3></div>
+            <div class="panel-body">
+              <ul style="margin:0 0 10px 18px;padding:0;font-size:12.5px;line-height:1.9;color:var(--text-secondary)">${p.items.map(i=>`<li>${i}</li>`).join('')}</ul>
+              <button class="btn btn-primary btn-sm" onclick="DeliverCenter.packs[${this.packs.indexOf(p)}].fns.forEach(f=>DeliverCenter.safe(()=>eval(f)))">⬇ 一键导出本包</button>
+            </div>
+          </div>`).join('')}
+        </div>
+        <div class="calc-note" style="margin-top:10px">📌 提示：测试报告数据包中的"调控执行记录"需先在「楼宇协同与策略执行」页执行一次调控任务；"楼宇协同联动运行策略"需先选择区县生成协同方案。</div>
+      </div>
+    </details>`;
+  }
+};
+
+/* ============================================================
    问卷调查与热感觉投票模块（合同要求：每类≥10户）
    可接受温度上限/容忍时长锚定台账"舒适温度区间"字段；
    激励响应意愿与台账"能否响应激励政策"一致。
@@ -793,7 +828,8 @@ const Ledger={
         </div>
       </div>
     </div>
-    ${SurveyModule.render()}`;
+    ${SurveyModule.render()}
+    ${DeliverCenter.render()}`;
   },
   updateParams(){
     const outdoor=parseFloat(document.getElementById('lgOutdoor').value);
