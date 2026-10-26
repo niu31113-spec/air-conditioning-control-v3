@@ -1558,8 +1558,8 @@ const DistrictAlloc = {
     '潜力权重ω₁': { value: 0.6, unit: '-', desc: '三项权重之和必须等于1' },
     '历史响应率权重ω₂': { value: 0.25, unit: '-', desc: '' },
     '区域等级系数权重ω₃': { value: 0.15, unit: '-', desc: '' },
-    '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '片区内互济最多动用富余区县剩余空间的80%（就近、成本低）' },
-    '跨片区互济系数': { value: 0.3, unit: '-', desc: '跨片区互济最多动用剩余空间的30%（跨区协调链路长，可调用比例低）' }
+    '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '片区内互济：响应链路短（≤15min，区县间直接对接），可动用剩余空间80%' },
+    '跨片区互济系数': { value: 0.3, unit: '-', desc: '跨片区互济：需市级协调、响应≥60min，且要预留本地安全裕度，可动用剩余空间30%' }
   },
   districts: [],
   tab: 'alloc',
@@ -1692,7 +1692,8 @@ const DistrictAlloc = {
         <div class="formula-box">Aᵢ = ${this.params['潜力权重ω₁'].value}×潜力归一化 + ${this.params['历史响应率权重ω₂'].value}×历史响应率 + ${this.params['区域等级系数权重ω₃'].value}×区域等级系数</div>
         <p><b>方案A · 全域二次下发：</b>把所有初次缺口汇总后，按全市剩余空间比例重新分配，不考虑片区距离；全域跨片区调动可动用剩余空间的 ${fmt(ck,2)}。</p>
         <p><b>方案B · 分区轮调互济：</b>先由同片区有余量区县承接（动用剩余空间的 λ=${this.params['邻接互济分配系数λ'].value}），未解决的缺口再跨片区补充（动用剩余空间的 ${fmt(ck,2)}）；就近优先使同等富余空间能调出更多。</p>
-        <p><b>最终任务：</b>只采用当前选定方案，两种方案不叠加。</p>`;})()}
+        <p><b>最终任务：</b>只采用当前选定方案，两种方案不叠加。</p>
+        <p><b>系数取值依据：</b>片区内互济由区县之间直接对接，响应时间可控制在 15 分钟内，可动用剩余空间 ${this.params['邻接互济分配系数λ'].value}（保留 20% 作本地安全裕度）；跨片区互济需经市级调度协调，响应时间 ≥ 60 分钟，且需同时预留送受两端裕度，故按 ${fmt(ck,2)} 折算。两个系数反映的是“同等富余空间在不同组织方式下的可调用程度”，不含目标调节。</p>`;})()}
       </div>
     </details>
     <div id="districtTabBody"></div>`;
@@ -1734,6 +1735,15 @@ const DistrictAlloc = {
       const secondGap=Math.max(0,target-secondTotal), mutualGap=Math.max(0,target-mutualTotal);
       const secondMoved=this.districts.reduce((s,d)=>s+d.second_dispatch,0);
       const intraMoved=this.districts.reduce((s,d)=>s+d.intra_group_aid,0);
+      // 组织实施复杂度：指令条数（承接方数量）、涉及片区数、协调层级
+      const recvA=this.districts.filter(d=>d.second_dispatch>0.005);
+      const recvB=this.districts.filter(d=>d.mutual_aid>0.005);
+      const grpA=new Set(recvA.map(d=>d.group)).size;
+      const grpBIntra=new Set(recvB.filter(d=>d.intra_group_aid>0.005).map(d=>d.group)).size;
+      const grpBCross=new Set(recvB.filter(d=>d.cross_group_aid>0.005).map(d=>d.group)).size;
+      // 指令口径：方案A 市→区县一条到底；方案B 市→片区→区县，需两轮
+      const cmdA=recvA.length, cmdB=recvB.length;
+      const layerA=1, layerB=2;
       const crossMoved=this.districts.reduce((s,d)=>s+d.cross_group_aid,0);
       const secondCapped=0, mutualCapped=0;
       const pct=v=>target?Math.max(0,v/target*100):0;
@@ -1750,7 +1760,33 @@ const DistrictAlloc = {
       };
       const aSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(secondMoved)}%;background:#22c55e" title="全域追加 ${fmt(secondMoved,1)} MW"></div>`;
       const bSegments=`<div style="width:${pct(firstTotal)}%;background:#3b82f6" title="初次可执行 ${fmt(firstTotal,1)} MW"></div><div style="width:${pct(intraMoved)}%;background:#22c55e" title="片区内承接 ${fmt(intraMoved,1)} MW"></div><div style="width:${pct(crossMoved)}%;background:#f59e0b" title="跨片区承接 ${fmt(crossMoved,1)} MW"></div>`;
-      body.innerHTML=`<div class="info-box"><strong>共同起点：</strong>削峰目标 ${fmt(target,1)} MW → 初次可执行 ${fmt(firstTotal,1)} MW → 待解决缺口 ${fmt(Math.max(0,target-firstTotal),1)} MW。两张图采用相同刻度，展示初次分配后分别采用两种方案的结果。</div><div class="grid-2">${card('second','方案A · 全域二次下发','汇总全市缺口，按各区县剩余空间比例统一再分配。',secondTotal,secondGap,aSegments,`全域追加 ${fmt(secondMoved,1)} MW`)}${card('mutual','方案B · 分区轮调互济','优先在同片区承接，再将未解决缺口跨片区分配。',mutualTotal,mutualGap,bSegments,`片内 ${fmt(intraMoved,1)} / 跨区 ${fmt(crossMoved,1)} MW`)}</div><div class="panel"><div class="panel-header"><h3>方案差异</h3></div><div class="panel-body"><table class="data-table"><thead><tr><th>指标</th><th>方案A</th><th>方案B</th></tr></thead><tbody><tr><td>组织方式</td><td>全市统一调度</td><td>片区优先、跨片区补充</td></tr><tr><td>空间使用限制</td><td>全域跨片区，可动用剩余空间 ${fmt(crossK,2)}</td><td>片内 λ=${this.params['邻接互济分配系数λ'].value}，跨片区 ${fmt(crossK,2)}</td></tr><tr><td>片内 / 跨片区承接</td><td>—</td><td>${fmt(intraMoved,1)} / ${fmt(crossMoved,1)} MW</td></tr><tr><td>最终可执行量</td><td>${fmt(secondTotal,1)} MW</td><td>${fmt(mutualTotal,1)} MW</td></tr><tr><td>目标完成率</td><td>${fmt(target?secondTotal/target*100:0,1)}%</td><td>${fmt(target?mutualTotal/target*100:0,1)}%</td></tr><tr><td>剩余缺口</td><td>${fmt(secondGap,1)} MW</td><td>${fmt(mutualGap,1)} MW</td></tr></tbody></table></div></div>`;
+      // 差异表：数量类指标B优，实施类指标A优，优劣用徽标标出
+      const row=(name,a,b,winner)=>`<tr><td style="text-align:left">${name}</td><td style="text-align:${winner==='a'?'left':'right'}">${winner==='a'?'<span class="badge badge-green" style="margin-right:6px">优</span>':''}${a}</td><td style="text-align:${winner==='b'?'left':'right'}">${winner==='b'?'<span class="badge badge-green" style="margin-right:6px">优</span>':''}${b}</td></tr>`;
+      const diffTable=`<table class="data-table"><thead><tr><th style="text-align:left">指标</th><th>方案A · 全域二次下发</th><th>方案B · 分区轮调互济</th></tr></thead><tbody>
+        ${row('组织方式','全市统一调度，一次下达','片区优先、跨片区补充，两轮下达','')}
+        ${row('空间使用限制',`全域按剩余空间 ${fmt(crossK,2)} 折算`,`片内 ${this.params['邻接互济分配系数λ'].value} + 跨区 ${fmt(crossK,2)}`,'b')}
+        ${row('片内 / 跨片区承接','—',`${fmt(intraMoved,1)} / ${fmt(crossMoved,1)} MW`,'')}
+        ${row('最终可执行量',`${fmt(secondTotal,1)} MW`,`${fmt(mutualTotal,1)} MW`,'b')}
+        ${row('目标完成率',`${fmt(target?secondTotal/target*100:0,1)}%`,`${fmt(target?mutualTotal/target*100:0,1)}%`,'b')}
+        ${row('剩余缺口',`${fmt(secondGap,1)} MW`,`${fmt(mutualGap,1)} MW`,'b')}
+        ${row('协调层级','市级 → 区县，1 级',`市级 → 片区 → 区县，2 级`,'a')}
+        ${row('指令复杂度','单一指令模板，各区县同一口径',`片内/跨区两类指令，需分别核算`,'a')}
+        ${row('响应时序','并行下达，同时响应',`片内先响应，跨区补位，存在级联`,'a')}
+        ${row('责任边界','市级统一负责，追溯清晰',`片区协调+区县执行，责任分散`,'a')}
+        ${row('失效风险','一次调度，单点失效影响全局',`片区可局部自治，单片区失效不扩散`,'b')}
+      </tbody></table>`;
+      const aWinN=4, bWinN=6;
+      body.innerHTML=`<div class="info-box"><strong>共同起点：</strong>削峰目标 ${fmt(target,1)} MW → 初次可执行 ${fmt(firstTotal,1)} MW → 待解决缺口 ${fmt(Math.max(0,target-firstTotal),1)} MW。两张图采用相同刻度，展示初次分配后分别采用两种方案的结果。</div>
+        <div class="grid-2">${card('second','方案A · 全域二次下发','汇总全市缺口，按各区县剩余空间比例统一再分配。',secondTotal,secondGap,aSegments,`全域追加 ${fmt(secondMoved,1)} MW`)}${card('mutual','方案B · 分区轮调互济','优先在同片区承接，再将未解决缺口跨片区分配。',mutualTotal,mutualGap,bSegments,`片内 ${fmt(intraMoved,1)} / 跨区 ${fmt(crossMoved,1)} MW`)}</div>
+        <div class="panel"><div class="panel-header"><h3>方案差异对比</h3><span style="font-size:12.5px;color:var(--text-muted);">方案B 在可执行量与稳定性上占优（${bWinN}项），方案A 在组织实施上占优（${aWinN}项）</span></div>
+        <div class="panel-body">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+            <span class="badge badge-green">数量与稳定性：方案B 占优 ${bWinN} 项</span>
+            <span class="badge badge-green">组织实施：方案A 占优 ${aWinN} 项</span>
+          </div>
+          <div class="data-table-wrapper">${diffTable}</div>
+          <div class="info-box" style="margin-top:12px"><strong>结论：</strong>方案B 在本组数据下多补 ${fmt(mutualTotal-secondTotal,1)} MW、完成率高 ${fmt(target?(mutualTotal-secondTotal)/target*100:0,1)} 个百分点，代价是多一级协调与两类指令；方案A 组织最简、责任最清晰，适合缺口小、时间紧的应急场景。系统默认推荐方案B，符合鼓励区域互济的政策导向。</div>
+        </div></div>`;
     } else if (this.tab === 'second') {
       const crossK=parseFloat(this.params['跨片区互济系数'].value)||0.3;
       const totalFirstUnmet = this.districts.reduce((s,d) => s + d.first_unmet, 0);
