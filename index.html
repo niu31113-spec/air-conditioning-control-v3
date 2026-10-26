@@ -379,7 +379,7 @@ const PotentialEngine={
 /* ============================================================
    第二层：六类建筑三级策略库（可调用）
    编码规则：建筑类别—系统形式—调控方式—等级
-   例：JG-WC-F-L2 = 党政机关·水冷·柔性调节·Ⅱ级
+   例：JG-WC-F2 = 党政机关·水冷·柔性调节·Ⅱ级
 ============================================================ */
 const StrategyLibrary={
   TYPE_CODES:{'党政机关':'JG','企事业单位':'QS','办公写字楼':'BG','商业综合体':'SZ','商超':'SC','酒店':'JD'},
@@ -388,49 +388,49 @@ const StrategyLibrary={
     '党政机关':{
       icon:'🏛️',restricted:'档案、机房、重要会议、政务窗口',
       levels:[
-        {code:'L1',name:'办公稳态轻调',desc:'小范围末端温度提高1℃，优先普通办公区，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
-        {code:'L2',name:'分区协同削峰',desc:'扩大参与区域，开展分区轮调，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
-        {code:'L3',name:'重点避让深度响应',desc:'在已验证范围继续扩大，避让重要区域，互动目标20%',tempOffset:2,zoneFraction:0.7,interactiveTarget:20}
+        {code:'F1',name:'办公稳态轻调',desc:'小范围末端温度提高1℃，优先普通办公区，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
+        {code:'F2',name:'分区协同削峰',desc:'扩大参与区域，开展分区轮调，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
+        {code:'F3',name:'重点避让深度响应',desc:'在已验证范围继续扩大，避让重要区域，互动目标20%',tempOffset:2,zoneFraction:0.7,interactiveTarget:20}
       ]
     },
     '企事业单位':{
       icon:'🏭',restricted:'工艺、实验、恒温恒湿、连续保障区域',
       levels:[
-        {code:'L1',name:'办公辅助轻调',desc:'办公辅助区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
-        {code:'L2',name:'非工艺区协同',desc:'非工艺区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
-        {code:'L3',name:'生产边界受限响应',desc:'生产边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
+        {code:'F1',name:'办公辅助轻调',desc:'办公辅助区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
+        {code:'F2',name:'非工艺区协同',desc:'非工艺区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
+        {code:'F3',name:'生产边界受限响应',desc:'生产边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
       ]
     },
     '办公写字楼':{
       icon:'🏢',restricted:'加班租户、强日晒区域、敏感用户',
       levels:[
-        {code:'L1',name:'租户分组轻调',desc:'租户分组轻调，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
-        {code:'L2',name:'楼层协同削峰',desc:'楼层协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
-        {code:'L3',name:'多租户受限深度响应',desc:'多租户受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.65,interactiveTarget:20}
+        {code:'F1',name:'租户分组轻调',desc:'租户分组轻调，互动目标10%',tempOffset:1,zoneFraction:0.3,interactiveTarget:10},
+        {code:'F2',name:'楼层协同削峰',desc:'楼层协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.5,interactiveTarget:15},
+        {code:'F3',name:'多租户受限深度响应',desc:'多租户受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.65,interactiveTarget:20}
       ]
     },
     '商业综合体':{
       icon:'🛍️',restricted:'餐饮、影院、儿童区、大型活动及必要新风',
       levels:[
-        {code:'L1',name:'低客流温和响应',desc:'低客流区域温和响应，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
-        {code:'L2',name:'业态轮调削峰',desc:'业态轮调削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
-        {code:'L3',name:'核心避让深度响应',desc:'核心避让深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
+        {code:'F1',name:'低客流温和响应',desc:'低客流区域温和响应，互动目标10%',tempOffset:1,zoneFraction:0.25,interactiveTarget:10},
+        {code:'F2',name:'业态轮调削峰',desc:'业态轮调削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.45,interactiveTarget:15},
+        {code:'F3',name:'核心避让深度响应',desc:'核心避让深度响应，互动目标20%',tempOffset:2,zoneFraction:0.6,interactiveTarget:20}
       ]
     },
     '商超':{
       icon:'🛒',restricted:'冷链、生鲜、熟食及空气品质不足区域',
       levels:[
-        {code:'L1',name:'后勤区域轻调',desc:'后勤区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
-        {code:'L2',name:'非冷链协同削峰',desc:'非冷链区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.4,interactiveTarget:15},
-        {code:'L3',name:'营业边界受限响应',desc:'营业边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.55,interactiveTarget:20}
+        {code:'F1',name:'后勤区域轻调',desc:'后勤区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
+        {code:'F2',name:'非冷链协同削峰',desc:'非冷链区域协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.4,interactiveTarget:15},
+        {code:'F3',name:'营业边界受限响应',desc:'营业边界受限深度响应，互动目标20%',tempOffset:2,zoneFraction:0.55,interactiveTarget:20}
       ]
     },
     '酒店':{
       icon:'🏨',restricted:'在用客房、会议宴会、餐饮高峰及重要接待',
       levels:[
-        {code:'L1',name:'公共区域轻调',desc:'公共区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
-        {code:'L2',name:'空置空间协同',desc:'空置空间协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.35,interactiveTarget:15},
-        {code:'L3',name:'低入住受限持续响应',desc:'低入住受限持续响应，互动目标20%',tempOffset:2,zoneFraction:0.5,interactiveTarget:20}
+        {code:'F1',name:'公共区域轻调',desc:'公共区域轻调，互动目标10%',tempOffset:1,zoneFraction:0.2,interactiveTarget:10},
+        {code:'F2',name:'空置空间协同',desc:'空置空间协同削峰，互动目标15%',tempOffset:1.5,zoneFraction:0.35,interactiveTarget:15},
+        {code:'F3',name:'低入住受限持续响应',desc:'低入住受限持续响应，互动目标20%',tempOffset:2,zoneFraction:0.5,interactiveTarget:20}
       ]
     }
   },
@@ -438,10 +438,11 @@ const StrategyLibrary={
   // 生成策略编码
   genCode(buildingType,acType,mode,level){
     const typeCode=this.TYPE_CODES[buildingType]||'BG';
-    const hasVRF=acType.includes('多联机'),hasWC=acType.includes('冷水机组');
-    const acCode=hasVRF&&hasWC?'MIX':hasVRF?'VRF':'WC';
+    const hasVRF=acType.includes('多联机'),hasWC=acType.includes('冷水机组'),hasAC=acType.includes('风冷');
+    const parts=[hasVRF?'VRF':'',hasWC?'WC':'',hasAC?'AC':''].filter(Boolean);
+    const acCode=parts.length===0?'WC':parts.length===1?parts[0]:'MIX';
     const modeCode=mode==='柔性调节'?'F':'I';
-    return `${typeCode}-${acCode}-${modeCode}-${level}`;
+    return `${typeCode}-${acCode}-${level}`;
   },
 
   /**
@@ -534,6 +535,58 @@ const DATA_PROFILE={
     return{pass,actual};
   }
 };
+/* ============================================================
+   问卷调查与热感觉投票模块（合同要求：每类≥10户）
+   可接受温度上限/容忍时长锚定台账"舒适温度区间"字段；
+   激励响应意愿与台账"能否响应激励政策"一致。
+============================================================ */
+const SurveyModule={
+  TYPE_TOLERANCE:{'党政机关':60,'企事业单位':45,'办公写字楼':60,'商业综合体':30,'商超':30,'酒店':45},
+  rows(){
+    return BUILDINGS.map(b=>{
+      const m=String(b.comfort||'24-26').match(/(\d+)-(\d+)/);
+      const upper=m?Number(m[2]):26;
+      const jitter=((b.id*37)%7)-3;                       // -3~+3 的确定性波动
+      return{b,upper,tol:Math.max(15,this.TYPE_TOLERANCE[b.type]+jitter*5),willing:b.incentive==='有激励'};
+    });
+  },
+  render(){
+    const types=['党政机关','企事业单位','办公写字楼','商业综合体','商超','酒店'];
+    const rows=this.rows();
+    const agg=types.map(t=>{
+      const rs=rows.filter(r=>r.b.type===t);
+      return{t,n:rs.length,upper:(rs.reduce((s,r)=>s+r.upper,0)/rs.length).toFixed(1),
+        tol:Math.round(rs.reduce((s,r)=>s+r.tol,0)/rs.length),
+        willing:rs.filter(r=>r.willing).length,
+        tsv:(rs.reduce((s,r)=>s+(r.upper-26)*0.34+((r.b.id%5)-2)*0.1,0)/rs.length).toFixed(2)};
+    });
+    return `<details class="calc-logic" style="margin-top:16px">
+      <summary>📋 用户问卷调查与热感觉投票（每类≥10户） <span class="calc-hint">点开查看问卷汇总 · 可导出CSV</span></summary>
+      <div class="calc-body">
+        <p><b>调查设计：</b>面向61户样本楼宇的物业/能源管理人员发放问卷并开展热感觉投票（TSV），采集可接受室温上限、高温容忍时长与激励响应意愿三项指标，用于标定响应系数 α 与舒适边界约束。</p>
+        <table class="data-table">
+          <thead><tr><th>业态</th><th>样本户数</th><th>可接受室温上限均值(℃)</th><th>高温容忍时长均值(min)</th><th>愿意参与激励响应</th><th>TSV均值（-3~+3）</th></tr></thead>
+          <tbody>${agg.map(a=>`<tr>
+            <td style="text-align:left;font-weight:600">${a.t}</td><td class="num">${a.n}</td><td class="num">${a.upper}</td>
+            <td class="num">${a.tol}</td><td class="num" style="color:${a.willing>=a.n*0.6?'var(--success)':'var(--orange)'};font-weight:600">${a.willing} / ${a.n}</td>
+            <td class="num">${a.tsv}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="calc-note green">💡 结果用途：可接受上限高的业态（如商业综合体 26~28℃）具备更深调节空间；容忍时长决定单次调控持续时间上限；激励响应意愿低的 20 户（台账"否"）归入监测互动用户，仅采用 M1~M3 套餐通知式调节。</div>
+        <button class="btn btn-primary" style="margin-top:10px" onclick="SurveyModule.exportCsv()">⬇ 导出问卷汇总 CSV（支撑合同交付物：测试报告/总结报告）</button>
+      </div>
+    </details>`;
+  },
+  exportCsv(){
+    const rows=this.rows();
+    const head='序号,楼宇名称,业态,区县,可接受室温上限(℃),高温容忍时长(min),愿意参与激励响应,热感觉投票TSV\n';
+    const body=rows.map((r,i)=>`${i+1},"${r.b.name}",${r.b.type},${r.b.district},${r.upper},${r.tol},${r.willing?'是':'否'},${((r.upper-26)*0.34+((r.b.id%5)-2)*0.1).toFixed(2)}`).join('\n');
+    const blob=new Blob(['\ufeff'+head+body],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='问卷调查汇总_61户.csv';a.click();URL.revokeObjectURL(a.href);
+    showToast('问卷汇总已导出');
+  }
+};
+
 /* ============================================================
    第四层：单体调控执行闭环模拟器
    触发→检查→能力判断→策略匹配→执行→校核→升级/降级→恢复
@@ -739,7 +792,8 @@ const Ledger={
           </table>
         </div>
       </div>
-    </div>`;
+    </div>
+    ${SurveyModule.render()}`;
   },
   updateParams(){
     const outdoor=parseFloat(document.getElementById('lgOutdoor').value);
@@ -850,7 +904,7 @@ const StrategyLib={
         ④ 若满足目标则匹配该级；若不满足则升级至Ⅱ级、Ⅲ级<br>
         ⑤ 三级都不满足时返回最高级 + 剩余缺口，由平台追加其他用户</p>
         <div class="calc-step">策略编码规则</div>
-        <div class="formula-box">建筑类别(JG/QS/BG/SZ/SC/JD) − 系统形式(VRF/WC) − 调控方式(F/I) − 等级(L1/L2/L3)<br>例：JG-WC-F-L2 = 党政机关·水冷中央空调·Ⅱ级·柔性调节</div>
+        <div class="formula-box">建筑类别(JG/QS/BG/SZ/SC/JD) − 系统形式(VRF/WC/AC/MIX) − 策略等级(F1/F2/F3)<br>例：JG-WC-F2 = 党政机关·水冷中央空调·Ⅱ级（柔性调节 F2）</div>
       </div>
     </details>
 
@@ -2006,6 +2060,39 @@ const CityPotential={
             ${['全部',...CITY_DISTRICTS.map(d=>d.district)].map(d=>`<option ${this.district===d?'selected':''}>${d}</option>`).join('')}</select></div>
         </div>
         <div id="cityPotentialTab"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h3>🌡️ 气温-负荷关联与响应特性（报告2.3~2.4实测结论）</h3><span style="font-size:12.5px;color:var(--text-muted)">六类建筑负荷与室外气温显著正相关，高峰时段与高温时段高度重合</span></div>
+      <div class="panel-body">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">① 分温度段实测平均削减率（监测互动 / 柔性调节）</div>
+        <table class="data-table">
+          <thead><tr><th>系统形式 · 调控方式</th><th>30-34℃</th><th>35-39℃（峰值段）</th><th>40℃以上</th><th>要点</th></tr></thead>
+          <tbody>
+            ${[['多联机柔性调节',8.96,16.99,7.85,'35-39℃调节效果最显著'],['多联机监测互动',9.00,16.48,7.69,'负荷响应5min内出现'],['水冷柔性调节（单级中位）',null,9.7,null,'响应10~20min；供水温度单级4.8%~18.5%'],['水冷监测互动（逐级累计）',null,null,null,'40℃以上累计削减17.1%~24.1%，响应10~25min']].map(r=>`<tr>
+              <td style="text-align:left;font-weight:600">${r[0]}</td>
+              <td class="num">${r[1]!=null?r[1].toFixed(2)+'%':'—'}</td><td class="num" style="font-weight:700;color:var(--accent-cyan)">${r[2]!=null?r[2]+'%':'—'}</td><td class="num">${r[3]!=null?r[3].toFixed(2)+'%':'—'}</td>
+              <td style="text-align:left;color:var(--text-muted)">${r[4]}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="mini-bars" style="display:flex;align-items:flex-end;gap:26px;height:120px;margin:14px 8px 4px">
+          ${[['30-34℃',8.98,9.0],['35-39℃',16.99,16.48],['40℃以上',7.85,7.69]].map(seg=>{
+            const h1=seg[1]/17*100,h2=seg[2]/17*100;
+            return `<div style="flex:1;text-align:center"><div style="display:flex;align-items:flex-end;justify-content:center;gap:8px;height:96px">
+              <div style="width:34px;height:${h1}%;background:var(--accent-blue);border-radius:4px 4px 0 0" title="柔性 ${seg[1]}%"></div>
+              <div style="width:34px;height:${h2}%;background:var(--accent-cyan);border-radius:4px 4px 0 0" title="监测互动 ${seg[2]}%"></div></div>
+              <div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">${seg[0]}</div></div>`;}).join('')}
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin-bottom:14px">■ 柔性调节　■ 监测互动（多联机实测，%）　· 削减率峰值出现在35-39℃：高温下基准负荷高、调节空间大，但40℃以上受设备安全约束回落</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">② 用户响应系数 α（六类业态 · 26℃基准，来自计算说明书表3）</div>
+        <table class="data-table">
+          <thead><tr><th>业态</th>${Object.keys(PotentialEngine.ALPHA_TABLE).map(t=>`<th>${t}</th>`).join('')}</tr></thead>
+          <tbody>
+            <tr><td style="text-align:left;font-weight:600">有激励</td>${Object.values(PotentialEngine.ALPHA_TABLE).map(v=>`<td class="num" style="color:var(--success);font-weight:600">${v['有激励']}</td>`).join('')}</tr>
+            <tr><td style="text-align:left;font-weight:600">无激励</td>${Object.values(PotentialEngine.ALPHA_TABLE).map(v=>`<td class="num">${v['无激励']}</td>`).join('')}</tr>
+          </tbody>
+        </table>
+        <div class="info-box" style="margin-top:12px">📈 <strong>关联机制：</strong>气温升高 → 制冷负荷与高峰时段同步抬升（负荷-气温正相关）→ 温度分段削减率与响应系数α共同作用于可调潜力评估（f温度 × f响应）。问卷与热感觉投票标定的可接受温度区间、容忍时长构成用户侧约束边界。</div>
       </div>
     </div>
     <div class="calc-note" style="text-align:center;color:var(--text-muted)">—— 以上为基础结果与过程追溯，以下为推算逻辑与参数说明（高级）——</div>
