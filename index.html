@@ -1594,18 +1594,26 @@ const DistrictAlloc = {
     // 最大可调上限=理论潜力×安全余量系数，与附件7「最大可调上限」口径一致
     const source = this.DEFAULT_DISTRICTS;
     const maxPot = Math.max(...source.map(d => d.potential));
-    // 常规可调上限合计：理论可调潜力 × 常规安全余量系数（与目标无关的物理约束）
+    // 常规可调上限：按各区县口径逐项折算后求和（与附件7「最大可调上限」口径一致）
     const regularCapTotal = source.reduce((s,d) => s + d.potential * safety, 0);
-    // 工况判定：目标超出常规可调上限 → 自动进入应急工况，放宽安全余量系数
-    const emergency = totalTarget > regularCapTotal + 0.005;
-    const effSafety = emergency ? emSafety : safety;
+    // 应急工况下的最大可调能力
+    const emergencyCapTotal = source.reduce((s,d) => s + d.potential * emSafety, 0);
+    // 工况判定阈值：常规上限 × 1.05 —— 允许常规工况覆盖到上限附近（含5%容差），
+    // 只有目标明确超出常规可调能力时才升级为应急工况，避免默认目标就触发应急
+    const emergencyThreshold = regularCapTotal * 1.05;
+    const emergency = totalTarget > emergencyThreshold + 0.005;
+    // 应急工况下按需逐步放宽：系数随目标在 [常规, 应急系数] 区间线性插值，
+    // 目标越高放宽越多，避免一到应急就把能力顶满导致"目标调高反而完成率100%"的失真。
+    const effSafety = emergency
+      ? Math.min(emSafety, safety + (emSafety - safety) * ((totalTarget - emergencyThreshold) / Math.max(0.01, emergencyCapTotal - emergencyThreshold)))
+      : safety;
     this.workCondition = {
       emergency,
       regularCapTotal,
+      emergencyThreshold,
       effSafety,
       target: totalTarget,
-      // 应急工况下按理论潜力×应急系数可达的上限
-      emergencyCapTotal: source.reduce((s,d) => s + d.potential * emSafety, 0)
+      emergencyCapTotal
     };
     this.districts = source.map((d, i) => {
       const normPot = d.potential / maxPot;
@@ -1684,8 +1692,12 @@ const DistrictAlloc = {
     const target=parseFloat(this.params['全域削峰总目标'].value)||0;
     const finalGap=Math.max(0,target-finalTotal);
     const schemeName=this.selectedScheme==='second'?'方案A · 全域二次下发':'方案B · 分区轮调互济';
-    const wc=this.workCondition||{emergency:false,regularCapTotal:245.04,effSafety:0.2,emergencyCapTotal:368};
-    const condBanner=wc.emergency?`<div class="info-box" style="border-left:3px solid var(--warning);background:rgba(245,158,11,.08)"><strong>⚠️ 应急工况已自动启用：</strong>削峰目标 ${fmt(wc.target,1)} MW 已超出常规可调上限 ${fmt(wc.regularCapTotal,2)} MW，安全余量系数由 ${fmt(parseFloat(this.params['单区县安全余量系数'].value)||0.2,2)} 自动放宽至 <strong>${fmt(wc.effSafety,2)}</strong>，全市可调上限相应提升至 ${fmt(wc.emergencyCapTotal,2)} MW。该放宽由目标触发、界面全程可见；目标回到 ${fmt(wc.regularCapTotal,2)} MW 以下即自动恢复常规工况。</div>`:`<div class="info-box" style="border-left:3px solid var(--success)"><strong>✓ 常规工况：</strong>当前目标 ${fmt(wc.target,1)} MW 未超出常规可调上限 ${fmt(wc.regularCapTotal,2)} MW，安全余量系数按 ${fmt(wc.effSafety,2)} 执行；目标超出该上限时系统自动切换至应急工况并放宽系数。</div>`;
+    const wc=this.workCondition||{emergency:false,regularCapTotal:245.04,emergencyThreshold:257.3,effSafety:0.2,emergencyCapTotal:368};
+    const condBanner=wc.emergency
+      ? (wc.target > wc.emergencyCapTotal + 0.005
+        ? `<div class="info-box" style="border-left:3px solid var(--danger);background:rgba(239,68,68,.08)"><strong>🔴 已超全市最大可调能力：</strong>削峰目标 ${fmt(wc.target,1)} MW 高于应急工况下的最大可调能力 ${fmt(wc.emergencyCapTotal,2)} MW，安全余量系数已放宽至上限 ${fmt(wc.effSafety,2)}。超出部分（约 ${fmt(wc.target-wc.emergencyCapTotal,1)} MW）无法通过空调负荷解决，须由市级可中断负荷、需求响应等其他资源兜底。</div>`
+        : `<div class="info-box" style="border-left:3px solid var(--warning);background:rgba(245,158,11,.08)"><strong>⚠️ 应急工况已自动启用：</strong>削峰目标 ${fmt(wc.target,1)} MW 已超出常规可调能力（${fmt(wc.regularCapTotal,2)} MW +5% 容差 = ${fmt(wc.emergencyThreshold,2)} MW）。安全余量系数已由 ${fmt(parseFloat(this.params['单区县安全余量系数'].value)||0.2,2)} 按需放宽至 <strong>${fmt(wc.effSafety,2)}</strong>，当前全市可调上限 ${fmt(wc.regularCapTotal/ (parseFloat(this.params['单区县安全余量系数'].value)||0.2) * wc.effSafety,2)} MW；目标越高放宽越多，最高不超过应急系数 ${fmt(parseFloat(this.params['应急工况安全余量系数'].value)||0.3,2)}（对应 ${fmt(wc.emergencyCapTotal,2)} MW）。目标回落到 ${fmt(wc.emergencyThreshold,2)} MW 以下自动恢复常规工况。</div>`)
+      : `<div class="info-box" style="border-left:3px solid var(--success)"><strong>✓ 常规工况：</strong>当前目标 ${fmt(wc.target,1)} MW 在常规可调能力范围内（上限 ${fmt(wc.regularCapTotal,2)} MW，含 5% 容差至 ${fmt(wc.emergencyThreshold,2)} MW），安全余量系数按 ${fmt(wc.effSafety,2)} 执行；超出该阈值时系统自动切换至应急工况并按需放宽系数。</div>`;
     el.innerHTML = `
     <div class="page-header">
       <div><h2>区县可调潜力分配（38区县）</h2><div class="breadcrumb">潜力与分配 / 区县分配</div></div>
@@ -1718,7 +1730,7 @@ const DistrictAlloc = {
         <div class="formula-box">Aᵢ = ${this.params['潜力权重ω₁'].value}×潜力归一化 + ${this.params['历史响应率权重ω₂'].value}×历史响应率 + ${this.params['区域等级系数权重ω₃'].value}×区域等级系数</div>
         <p><b>方案A · 全域二次下发：</b>把所有初次缺口汇总后，按全市剩余空间比例重新分配，不考虑片区距离；全域跨片区调动可动用剩余空间的 ${fmt(ck,2)}。</p>
         <p><b>方案B · 分区轮调互济：</b>先由同片区有余量区县承接（动用剩余空间的 λ=${this.params['邻接互济分配系数λ'].value}），未解决的缺口再跨片区补充（动用剩余空间的 ${fmt(ck,2)}）；就近优先使同等富余空间能调出更多。</p>
-        <p><b>工况自动切换：</b>常规可调上限 = 理论可调潜力合计 ${fmt(this.districts.reduce((s,d)=>s+d.potential,0),0)} MW × 常规安全余量系数。削峰目标超出该上限时判定为应急工况，自动将安全余量系数放宽至应急值，全市可调上限随之提升；目标回落后自动恢复。区间为：常规 ${fmt(regTotal,2)} MW → 应急 ${fmt(emTotal,2)} MW，超出应急上限的缺口只能由市级可中断负荷兜底。</p>
+        <p><b>工况自动切换：</b>常规可调上限 = 理论可调潜力合计 ${fmt(this.districts.reduce((s,d)=>s+d.potential,0),0)} MW × 常规安全余量系数 = ${fmt(regTotal,2)} MW。为避免目标在能力边界附近反复切换，判定阈值取常规上限的 1.05 倍（${fmt(regTotal*1.05,2)} MW）：目标未超阈值按常规工况运行，超出则判定为应急工况并自动将安全余量系数放宽至应急值，全市可调能力上限提升至 ${fmt(emTotal,2)} MW；目标回落后自动恢复。超出应急上限的缺口只能由市级可中断负荷兜底。</p>
         <p><b>最终任务：</b>只采用当前选定方案，两种方案不叠加。</p>
         <p><b>系数取值依据：</b>片区内互济由区县之间直接对接，响应时间可控制在 15 分钟内，可动用剩余空间 ${this.params['邻接互济分配系数λ'].value}（保留 20% 作本地安全裕度）；跨片区互济需经市级调度协调，响应时间 ≥ 60 分钟，且需同时预留送受两端裕度，故按 ${fmt(ck,2)} 折算。两个系数反映的是“同等富余空间在不同组织方式下的可调用程度”，不含目标调节。</p>`;})()}
       </div>
