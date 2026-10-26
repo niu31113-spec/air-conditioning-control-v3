@@ -523,8 +523,9 @@ const BUILDINGS=RAW_BUILDINGS.map(([id,name,district,type,acType,capacity,baseLo
 }));
 const BuildingConfigStore={
   key:'ac-v3-building-config',
-  load(){try{const saved=JSON.parse(localStorage.getItem(this.key)||'{}');BUILDINGS.forEach(b=>{if(saved[b.id])Object.assign(b,saved[b.id])})}catch(e){}},
-  save(){try{const data={};BUILDINGS.forEach(b=>data[b.id]={setTemp:b.setTemp,incentive:b.incentive,tempOffset:b.tempOffset,maxTempOffset:b.maxTempOffset});localStorage.setItem(this.key,JSON.stringify(data))}catch(e){showToast('楼宇配置保存失败')}}
+  ver:'v2-ledger', // v2：台账接入附件1真实字段，旧版本缓存作废
+  load(){try{const saved=JSON.parse(localStorage.getItem(this.key)||'{}');if(saved.__ver!==this.ver)return;BUILDINGS.forEach(b=>{if(saved[b.id])Object.assign(b,saved[b.id])})}catch(e){}},
+  save(){try{const data={__ver:this.ver};BUILDINGS.forEach(b=>data[b.id]={setTemp:b.setTemp,incentive:b.incentive,tempOffset:b.tempOffset,maxTempOffset:b.maxTempOffset});localStorage.setItem(this.key,JSON.stringify(data))}catch(e){showToast('楼宇配置保存失败')}}
 };
 const DATA_PROFILE={
   version:'统一业务口径 V3.1',updated:'2026-09-03',
