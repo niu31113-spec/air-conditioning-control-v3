@@ -1674,7 +1674,7 @@ const DistrictAlloc = {
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
       <div class="stat-card"><div class="stat-icon cyan">🎯</div><div class="stat-value">${this.params['全域削峰总目标'].value}</div><div class="stat-label">全域削峰目标 (MW)</div><div class="stat-change up">目标可调整</div></div>
-      <div class="stat-card"><div class="stat-icon purple">📉</div><div class="stat-value">${fmt(totalPot,1)}</div><div class="stat-label">全市中性潜力 (MW)</div><div class="stat-change up">与全市推算口径一致</div></div>
+      <div class="stat-card"><div class="stat-icon purple">📉</div><div class="stat-value">${fmt(CityPotential.mw(CityPotential.totals().neutral),1)}</div><div class="stat-label">全市中性潜力 (MW)</div><div class="stat-change up">与全市推算页同源（${CityPotential.mode==='standard'?'标准口径':'联动楼宇台账情景'}）· 附件7理论潜力合计 ${fmt(totalPot,1)} MW 仅作分配权重基准</div></div>
       <div class="stat-card"><div class="stat-icon blue">📋</div><div class="stat-value">${fmt(this.districts.reduce((s,d)=>s+d.first_dispatch,0),1)}</div><div class="stat-label">初次可执行量 (MW)</div><div class="stat-change up">${deficit} 个区县出现缺口</div></div>
       <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-value">${fmt(finalTotal,1)}</div><div class="stat-label">当前方案可执行量 (MW)</div><div class="stat-change up">${schemeName}</div></div>
       <div class="stat-card"><div class="stat-icon ${finalGap>0.05?'red':'green'}">${finalGap>0.05?'⚠️':'✓'}</div><div class="stat-value">${fmt(finalGap,1)}</div><div class="stat-label">剩余缺口 (MW)</div><div class="stat-change ${finalGap>0.05?'down':'up'}">${finalGap>0.05?'需要市级兜底':'目标已覆盖'}</div></div>
