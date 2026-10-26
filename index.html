@@ -1560,7 +1560,7 @@ const DistrictAlloc = {
     '邻接互济分配系数λ': { value: 0.8, unit: '-', desc: '方案B中，富余区县最多用80%剩余空间参与互济' }
   },
   districts: [],
-  tab: 'params',
+  tab: 'alloc',
   selectedScheme: 'mutual',
   inited: false,
   init() {
@@ -1680,11 +1680,10 @@ const DistrictAlloc = {
       <div class="stat-card"><div class="stat-icon ${finalGap>0.05?'red':'green'}">${finalGap>0.05?'⚠️':'✓'}</div><div class="stat-value">${fmt(finalGap,1)}</div><div class="stat-label">剩余缺口 (MW)</div><div class="stat-change ${finalGap>0.05?'down':'up'}">${finalGap>0.05?'需要市级兜底':'目标已覆盖'}</div></div>
     </div>
     <div class="tabs">
-      <button class="tab-btn ${this.tab==='params'?'active':''}" onclick="DistrictAlloc.switchTab('params')">1　目标与参数</button>
-      <button class="tab-btn ${this.tab==='alloc'?'active':''}" onclick="DistrictAlloc.switchTab('alloc')">2　基础分配</button>
-      <button class="tab-btn ${this.tab==='compare'?'active':''}" onclick="DistrictAlloc.switchTab('compare')">3　方案对比</button>
-      <button class="tab-btn ${this.tab==='final'?'active':''}" onclick="DistrictAlloc.switchTab('final')">4　最终任务</button>
-      <button class="tab-btn ${this.tab==='rotation'?'active':''}" onclick="DistrictAlloc.switchTab('rotation')">5　轮调排班</button>
+      <button class="tab-btn ${this.tab==='alloc'?'active':''}" onclick="DistrictAlloc.switchTab('alloc')">1　基础分配</button>
+      <button class="tab-btn ${this.tab==='compare'?'active':''}" onclick="DistrictAlloc.switchTab('compare')">2　方案对比</button>
+      <button class="tab-btn ${this.tab==='final'?'active':''}" onclick="DistrictAlloc.switchTab('final')">3　最终任务</button>
+      <button class="tab-btn ${this.tab==='rotation'?'active':''}" onclick="DistrictAlloc.switchTab('rotation')">4　轮调排班</button>
     </div>
     <details class="calc-logic">
       <summary>📘 计算逻辑说明 <span class="calc-hint">点开查看这套数字是怎么算出来的</span></summary>
@@ -1709,13 +1708,11 @@ const DistrictAlloc = {
   },
   renderTab() {
     const body = document.getElementById('districtTabBody');
-    if (this.tab === 'params') {
-      body.innerHTML = `<div class="info-box">全市中性潜力由“全市可调潜力推算”统一提供，本页只设置分配目标、执行上限和策略参数。</div><div class="panel"><div class="panel-header"><h3>目标与参数</h3><span style="font-size:12.5px;color:var(--text-muted);">修改后立即重新计算</span></div>
-        <div class="panel-body"><div class="param-grid">${Object.keys(this.params).map(k => `
+    if (this.tab === 'alloc') {
+      const paramCards=Object.keys(this.params).map(k => `
           <div class="param-card"><h3>${k}</h3>
             <div class="value-row"><input type="number" step="0.001" value="${this.params[k].value}" data-param="${k}" onchange="DistrictAlloc.setParam(this)"><span class="unit">${this.params[k].unit}</span></div>
-            <div class="desc">${this.params[k].desc}</div></div>`).join('')}</div></div></div>`;
-    } else if (this.tab === 'alloc') {
+            <div class="desc">${this.params[k].desc}</div></div>`).join('');
       body.innerHTML = `<div class="panel"><div class="panel-header"><h3>基础分配</h3><span style="font-size:12.5px;color:var(--text-muted);">加权形成初次目标，再由安全上限判断实际可执行量</span></div>
         <div class="panel-body"><div class="data-table-wrapper"><table class="data-table"><thead><tr>
           <th>#</th><th>区县</th><th>片区</th><th>中性潜力(MW)</th><th>响应率</th><th>初次目标(MW)</th><th>安全上限(MW)</th><th>初次可执行(MW)</th><th>初次缺口(MW)</th><th>状态</th></tr></thead><tbody>
@@ -1724,7 +1721,10 @@ const DistrictAlloc = {
             <td>${fmt(d.max_adjustable,2)}</td><td>${fmt(d.first_dispatch,2)}</td>
             <td style="color:${d.first_unmet>0.005?'var(--danger)':'var(--text-muted)'};">${fmt(d.first_unmet,2)}</td>
             <td><span class="badge ${d.status==='富余'?'badge-green':d.status==='缺口'?'badge-red':'badge-yellow'}">${d.status}</span></td></tr>`).join('')}
-        </tbody></table></div></div></div>`;
+        </tbody></table></div></div></div>
+        <details class="calc-logic" style="margin-top:12px"><summary>⚙️ 目标与高级参数 <span class="calc-hint">削峰目标 · ω权重 · 安全余量 · λ（修改后立即重新计算）</span></summary>
+          <div class="calc-body"><div class="param-grid">${paramCards}</div></div>
+        </details>`;
     } else if (this.tab === 'compare') {
       const target=parseFloat(this.params['全域削峰总目标'].value)||0;
       const firstTotal=this.districts.reduce((s,d)=>s+d.first_dispatch,0);
