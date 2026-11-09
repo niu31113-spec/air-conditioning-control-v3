@@ -1696,53 +1696,6 @@ const ChartBuilders = {
     });
   },
 
-  /* ③ 全市 · 热力图：区县 × 业态 潜力矩阵（MW） */
-  cityHeat(id, rows){
-    if(!rows || !rows.length) return;
-    const cats = CityPotential.categories;
-    const distOrder = [...new Set(rows.map(r => r.district))];
-    const districtMeta = {};
-    rows.forEach(r => { districtMeta[r.district] = r; });
-    distOrder.sort((a, b) => (districtMeta[b].neutral || 0) - (districtMeta[a].neutral || 0));
-    const data = [], maxV = Math.max(...rows.map(r => r.potential / 1000), 0.01);
-    rows.forEach(r => {
-      data.push([cats.indexOf(r.category), distOrder.indexOf(r.district), +(r.potential / 1000).toFixed(3)]);
-    });
-    ChartHub.init(id, {
-      backgroundColor: 'transparent',
-      textStyle: { fontFamily: CHART_FONT },
-      grid: { left: 78, right: 84, top: 34, bottom: 62 },
-      tooltip: ChartHub.tooltip({
-        formatter: p => {
-          const d = p.data;
-          return `<div style="font-weight:700;margin-bottom:4px">${distOrder[d[1]]} · ${cats[d[0]]}</div>
-            <div style="font-size:12px">中性潜力 <b style="color:#22d3ee">${fmt(d[2], 3)}</b> MW<br>
-            <span style="color:#9fb0c9">占该区县 ${fmt(d[2] / Math.max(0.001, (districtMeta[distOrder[d[1]]].neutral || 0) / 1000) * 100, 1)}%</span></div>`;
-        }
-      }),
-      xAxis: Object.assign({
-        type: 'category', data: cats, splitArea: { show: false },
-        axisLabel: { color: CHART_THEME.text, fontSize: 11, interval: 0 }
-      }, ChartHub.axisCommon(), { splitLine: { show: false } }),
-      yAxis: Object.assign({
-        type: 'category', data: distOrder,
-        axisLabel: { color: CHART_THEME.text, fontSize: 9.5, interval: 0 }
-      }, ChartHub.axisCommon(), { splitLine: { show: false } }),
-      visualMap: {
-        min: 0, max: maxV, calculable: true, orient: 'vertical', right: 12, top: 'middle',
-        itemWidth: 12, itemHeight: 150, precision: 2, text: ['高', '低'],
-        textStyle: { color: CHART_THEME.text, fontSize: 10.5 },
-        inRange: { color: ['rgba(23,37,64,.55)', '#1e3a8a', '#2563eb', '#0891b2', '#06b6d4', '#fbbf24'] }
-      },
-      series: [{
-        name: '中性潜力', type: 'heatmap', data,
-        label: { show: false },
-        itemStyle: { borderColor: 'rgba(8,14,26,.85)', borderWidth: 1, borderRadius: 2 },
-        emphasis: { itemStyle: { borderColor: '#e8edf5', borderWidth: 1.4, shadowBlur: 10, shadowColor: 'rgba(0,0,0,.6)' } }
-      }]
-    });
-  },
-
   /* ④ 协同执行 · 瀑布图：区县任务 → 初次未覆盖 → 协同承接 → 剩余缺口 → 最终可执行（kW） */
   waterfall(id, s){
     const steps = [
@@ -2763,12 +2716,6 @@ const CityPotential={
         <div class="panel-body">${topBars}</div></div>
     </div>
     <div class="panel">
-      <div class="panel-header"><h3>区县 × 业态 潜力热力图</h3><span style="font-size:12.5px;color:var(--text-muted)">颜色越亮潜力越大（MW）· 按区县中性潜力降序 · 悬停查看明细</span></div>
-      <div class="panel-body"><div id="chCityHeat" style="width:100%;height:740px"></div>
-        <div class="calc-note" style="margin-top:6px">横向看业态结构差异（商业综合体与办公写字楼占比最高），纵向看区县能级差异（第一梯队整体亮度明显高于第五梯队）。</div>
-      </div>
-    </div>
-    <div class="panel">
       <div class="panel-header"><h3>测算结果与过程追溯</h3>
         <div class="tabs" style="margin:0">
           ${[['districts','区县结果'],['tiers','梯队汇总'],['process','过程明细']].map(([k,l])=>`<button class="tab-btn ${this.tab===k?'active':''}" onclick="CityPotential.switchTab('${k}')">${l}</button>`).join('')}
@@ -2833,12 +2780,6 @@ const CityPotential={
     ${this.sensitivityView()}
 `;
     this.renderTab();
-    this.renderCharts();
-  },
-  renderCharts(){
-    if(typeof echarts === 'undefined') return;
-    const rows = this.processRows().filter(r => this.tier === '全部' || r.tier === this.tier);
-    ChartBuilders.cityHeat('chCityHeat', rows);
   },
   switchTab(tab){this.tab=tab;this.render();},
   setMode(mode){this.mode=mode;this.dispatchOverride=null;this.render();showToast(mode==='standard'?'已切换至标准口径':'已联动楼宇台账当前情景');},
