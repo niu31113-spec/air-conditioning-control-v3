@@ -792,6 +792,21 @@ const Ledger={
       <div class="stat-card"><div class="stat-icon green">👥</div><div class="stat-value">${filtered.filter(b=>b.userType==='柔性调节').length} <span style="font-size:14px;color:var(--text-muted)">/ ${filtered.filter(b=>b.userType==='监测互动').length}</span></div><div class="stat-label">柔性调节 / 监测互动用户</div><div class="stat-change up">按台账激励响应划分</div></div>
     </div>
 
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-header"><h3>楼宇潜力分布</h3><span style="font-size:12.5px;color:var(--text-muted)">X=基准负荷 · Y=可调比例 · 气泡=可调潜力 · 颜色=业态</span></div>
+        <div class="panel-body"><div id="chLedgerScatter" style="width:100%;height:380px"></div>
+          <div class="calc-note" style="margin-top:6px">虚线为样本均值分割线：右上象限＝高负荷且高可调比例（优先调控对象），右下象限＝高负荷但可调空间小（需设备改造）。</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h3>各业态可调比例分布</h3><span style="font-size:12.5px;color:var(--text-muted)">箱体 IQR · 横线中位数 · 散点离群户</span></div>
+        <div class="panel-body"><div id="chLedgerBox" style="width:100%;height:380px"></div>
+          <div class="calc-note" style="margin-top:6px">箱线图暴露同类业态内部的离散度：中位数接近但离群点多的业态，说明个体差异大，不宜只按均值下达任务。</div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-header"><h3>楼宇台账与潜力计算结果</h3><span style="font-size:12.5px;color:var(--text-muted)">点击行查看计算详情</span></div>
       <div class="panel-body" style="padding:0">
@@ -832,6 +847,16 @@ const Ledger={
     </div>
     ${SurveyModule.render()}
     ${DeliverCenter.render()}`;
+    this.renderCharts(results, filtered);
+  },
+  renderCharts(results, filtered){
+    if(typeof echarts === 'undefined') return;
+    const rows = results.map((r, i) => {
+      const b = filtered[i];
+      return { name: b.name, type: b.type, acType: b.acType, district: b.district, baseLoad: b.baseLoad, potential: r.potential, potentialPct: parseFloat(r.potentialPct) || 0 };
+    });
+    ChartBuilders.ledgerScatter('chLedgerScatter', rows);
+    ChartBuilders.ledgerBox('chLedgerBox', rows);
   },
   updateParams(){
     const outdoor=parseFloat(document.getElementById('lgOutdoor').value);
@@ -1335,7 +1360,18 @@ const Aggregate={
         <th>#</th><th>楼宇名称</th><th>空调类型</th><th>优先级</th><th>稳定能力</th><th>初次目标</th><th>待转出</th><th>承接量</th><th>最终任务</th><th>仿真削减</th><th>仿真缺口</th><th>执行状态</th><th>操作</th>
       </tr></thead><tbody>
         ${this.synergyBuildings.map(b=>{const r=this.executionResults[b.id];return`<tr><td>${b.seq}</td><td style="text-align:left"><strong>${b.name}</strong></td><td>${b.acType}</td><td><span class="badge ${b.priority==='一级'?'badge-red':b.priority==='二级'?'badge-orange':'badge-green'}">${b.priority}</span></td><td>${fmt(b.potential,1)}</td><td>${fmt(b.initial_target,1)}</td><td style="color:${b.transfer_out>0?'var(--warning)':'var(--text-muted)'}">${b.transfer_out>0?fmt(b.transfer_out,1):'-'}</td><td style="color:${b.accepted>0?'var(--success)':'var(--text-muted)'}">${b.accepted>0?'+'+fmt(b.accepted,1):'-'}</td><td style="font-weight:700;color:var(--accent-cyan)">${fmt(b.final_target,1)}</td><td>${r?fmt(r.actualReduction,1):'-'}</td><td style="color:${r&&r.gap>0?'var(--warning)':'var(--text-muted)'}">${r?fmt(r.gap,1):'-'}</td><td><span class="badge ${r?(r.success?'badge-green':'badge-red'):'badge-yellow'}">${r?(r.success?'已仿真':'已阻断'):'未执行'}</span></td><td><button class="btn btn-outline btn-sm" onclick="Aggregate.openDetail(${b.id})">${r?'查看/重算':'执行仿真'}</button></td></tr>`}).join('')}
-      </tbody></table></div></div></div>`;
+      </tbody></table></div></div></div>
+      <div class="panel"><div class="panel-header"><h3>区县任务分解（瀑布图）</h3><span style="font-size:12.5px;color:var(--text-muted)">任务 → 初次未覆盖 → 协同承接 → 剩余缺口 → 最终可执行 (kW)</span></div>
+        <div class="panel-body"><div id="chWaterfall" style="width:100%;height:340px"></div>
+          <div class="calc-note" style="margin-top:6px">红色段是楼宇能力不足被退回的部分，绿色段是富余楼宇承接回来的部分，两者之差形成剩余缺口；最终可执行不等于任务，缺口需要回到区县层面重新统筹。</div>
+        </div>
+      </div>`;
+    this.renderCharts();
+  },
+  renderCharts(){
+    if(typeof echarts === 'undefined') return;
+    const s = this.synergySummary;
+    if(s) ChartBuilders.waterfall('chWaterfall', s);
   },
   executeAll(){
     const outdoor=Number(Ledger.outdoorTemp)||35;
@@ -1420,10 +1456,6 @@ const SingleCtrl={
     const e=this.execution;
     Aggregate.executionResults[bid]={actualReduction:e.actualReduction||0,gap:Math.max(0,target-(e.actualReduction||0)),achievementRate:e.achievementRate||0,strategyCode:e.strategyCode||'',success:e.success};
     document.getElementById('scExportBtn').disabled=false;
-    const loads=e.timeline?.map(p=>p.load)||[b.baseLoad];
-    const minLoad=Math.min(...loads),maxLoad=Math.max(...loads);
-    const span=Math.max(1,maxLoad-minLoad);
-    const chartPoints=(e.timeline||[]).map((p,i)=>`${30+i*(640/Math.max(1,e.timeline.length-1))},${170-(p.load-minLoad)/span*130}`).join(' ');
 
     const resultDiv=document.getElementById('scResult');
     resultDiv.innerHTML=`
@@ -1472,14 +1504,9 @@ const SingleCtrl={
       </div>
     </div>
     <div class="panel">
-      <div class="panel-header"><h3>负荷调控与恢复曲线</h3><span style="font-size:12.5px;color:var(--text-muted)">基准 → 下发 → 校核 → 保持 → 分批恢复 → 反弹校核</span></div>
+      <div class="panel-header"><h3>负荷调控与恢复曲线</h3><span style="font-size:12.5px;color:var(--text-muted)">负荷曲线（左轴）· 削减量（右轴柱）· 保持时段（绿框）· 反弹峰值（标记）</span></div>
       <div class="panel-body">
-        <svg viewBox="0 0 700 210" style="width:100%;height:230px;background:rgba(7,13,24,.35);border-radius:10px" role="img" aria-label="负荷调控与恢复曲线">
-          <line x1="30" y1="170" x2="670" y2="170" stroke="#334155"/><line x1="30" y1="40" x2="30" y2="170" stroke="#334155"/>
-          <polyline fill="none" stroke="#22d3ee" stroke-width="4" points="${chartPoints}"/>
-          ${(e.timeline||[]).map((p,i)=>{const x=30+i*(640/Math.max(1,e.timeline.length-1));const y=170-(p.load-minLoad)/span*130;return `<circle cx="${x}" cy="${y}" r="4" fill="#60a5fa"><title>${p.stage}：${p.load}kW</title></circle><text x="${x}" y="195" fill="#94a3b8" font-size="9" text-anchor="middle">${p.minute}m</text>`}).join('')}
-          <text x="38" y="32" fill="#94a3b8" font-size="10">负荷 kW（${fmt(minLoad,0)}–${fmt(maxLoad,0)}）</text>
-        </svg>
+        <div id="chSingle" style="width:100%;height:320px"></div>
         <div class="data-table-wrapper" style="margin-top:12px"><table class="data-table"><thead><tr><th>相对时间</th><th>阶段</th><th>负荷(kW)</th><th>削减量(kW)</th></tr></thead><tbody>
           ${(e.timeline||[]).map(p=>`<tr><td>${p.minute} min</td><td>${p.stage}</td><td>${fmt(p.load,2)}</td><td>${fmt(p.reduction,2)}</td></tr>`).join('')}
         </tbody></table></div>
@@ -1487,6 +1514,7 @@ const SingleCtrl={
     </div>`:`
     <div class="info-box warning"><strong>执行未开始：</strong>${e.reason}</div>`}
     `;
+    if(e.success) ChartBuilders.singleTimeline('chSingle', e.timeline);
     showToast(e.success?'单体执行记录已生成':'执行被阻断');
   },
   exportRecord(){
@@ -1550,6 +1578,272 @@ const ChartHub = {
 window.addEventListener('resize', () => {
   Object.values(ChartHub.insts).forEach(c => { try { c.resize(); } catch (e) {} });
 });
+
+/* ============================================================
+   各页面专用图表构造器
+   —— 所有数值直接来自现有计算引擎，不做任何手工造数
+============================================================ */
+const ChartBuilders = {
+  TYPE_COLORS: { '党政机关':'#3b82f6', '企事业单位':'#06b6d4', '办公写字楼':'#8b5cf6', '商业综合体':'#f59e0b', '酒店':'#10b981', '商超':'#ef4444' },
+  typeColor(t){ return this.TYPE_COLORS[t] || '#94a3b8'; },
+
+  /* 分位数（线性插值） */
+  quantile(sorted, p){
+    if(!sorted.length) return 0;
+    const i = (sorted.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo);
+  },
+
+  /* ① 台账 · 气泡散点：X=基准负荷  Y=可调比例  气泡=可调潜力  颜色=业态 */
+  ledgerScatter(id, rows){
+    if(!rows || !rows.length) return;
+    const types = [...new Set(rows.map(r => r.type))];
+    const avgX = rows.reduce((s, r) => s + r.baseLoad, 0) / rows.length;
+    const avgY = rows.reduce((s, r) => s + r.potentialPct, 0) / rows.length;
+    const maxP = Math.max(...rows.map(r => r.potential), 1);
+    const series = types.map(t => ({
+      name: t, type: 'scatter',
+      data: rows.filter(r => r.type === t).map(r => ({
+        value: [r.baseLoad, r.potentialPct, r.potential], name: r.name, ac: r.acType, district: r.district
+      })),
+      symbolSize: v => 6 + Math.sqrt(Math.max(0, v[2]) / maxP) * 30,
+      itemStyle: { color: this.typeColor(t), opacity: .72, borderColor: 'rgba(232,237,245,.5)', borderWidth: .7, shadowBlur: 9, shadowColor: 'rgba(0,0,0,.4)' },
+      emphasis: { focus: 'series', itemStyle: { opacity: 1, borderColor: '#fff', borderWidth: 1.6 } }
+    }));
+    if(series.length){
+      series[0].markLine = {
+        silent: true, symbol: 'none',
+        lineStyle: { color: 'rgba(148,163,184,.5)', type: 'dashed', width: 1 },
+        label: { color: CHART_THEME.text, fontSize: 10, backgroundColor: 'rgba(11,18,32,.7)', padding: [2, 4], borderRadius: 3 },
+        data: [
+          { xAxis: avgX, label: { formatter: '均负荷 ' + fmt(avgX, 0) + 'kW' } },
+          { yAxis: avgY, label: { formatter: '均比例 ' + fmt(avgY, 1) + '%' } }
+        ]
+      };
+    }
+    ChartHub.init(id, {
+      backgroundColor: 'transparent',
+      textStyle: { fontFamily: CHART_FONT },
+      grid: { left: 56, right: 24, top: 42, bottom: 46 },
+      legend: { top: 4, left: 'center', itemWidth: 9, itemHeight: 9, textStyle: { color: CHART_THEME.text, fontSize: 11 }, icon: 'circle' },
+      tooltip: ChartHub.tooltip({
+        trigger: 'item',
+        formatter: p => {
+          const d = p.data;
+          return `<div style="font-weight:700;margin-bottom:4px">${esc(d.name)}</div>
+            <div style="font-size:11.5px;color:#9fb0c9">${p.seriesName} · ${esc(d.ac)} · ${esc(d.district)}</div>
+            <div style="margin-top:5px;line-height:1.7">基准负荷 <b style="color:#60a5fa">${fmt(d.value[0], 0)}</b> kW<br>
+            可调比例 <b style="color:#f59e0b">${fmt(d.value[1], 1)}</b>%<br>
+            可调潜力 <b style="color:#22d3ee">${fmt(d.value[2], 1)}</b> kW</div>`;
+        }
+      }),
+      xAxis: Object.assign({ name: '基准负荷 (kW)', nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value', scale: true }, ChartHub.axisCommon()),
+      yAxis: Object.assign({ name: '可调比例 (%)', nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value', scale: true }, ChartHub.axisCommon()),
+      series
+    });
+  },
+
+  /* ② 台账 · 箱线图：各业态可调比例分布（含离群户散点） */
+  ledgerBox(id, rows){
+    if(!rows || !rows.length) return;
+    const order = ['党政机关', '企事业单位', '办公写字楼', '商业综合体', '酒店', '商超'];
+    const types = order.filter(t => rows.some(r => r.type === t));
+    const boxData = [], outliers = [], stats = [];
+    types.forEach(t => {
+      const vals = rows.filter(r => r.type === t && Number.isFinite(r.potentialPct)).map(r => r.potentialPct).sort((a, b) => a - b);
+      if(!vals.length){ boxData.push([0, 0, 0, 0, 0]); outliers.push([]); stats.push(null); return; }
+      const min = vals[0], max = vals[vals.length - 1];
+      const q1 = this.quantile(vals, .25), med = this.quantile(vals, .5), q3 = this.quantile(vals, .75);
+      const iqr = q3 - q1, low = q1 - 1.5 * iqr, high = q3 + 1.5 * iqr;
+      const inl = vals.filter(v => v >= low && v <= high);
+      boxData.push([inl.length ? inl[0] : min, q1, med, q3, inl.length ? inl[inl.length - 1] : max]);
+      outliers.push(vals.filter(v => v < low || v > high));
+      stats.push({ n: vals.length, med, q1, q3, min, max });
+    });
+    const boxItems = types.map((t, i) => ({
+      value: [i, ...boxData[i]],
+      itemStyle: { color: 'rgba(59,130,246,.16)', borderColor: this.typeColor(t), borderWidth: 1.8 }
+    }));
+    const outSeries = {
+      name: '离群户', type: 'scatter', symbolSize: 7, itemStyle: { color: CHART_THEME.amber, opacity: .85 },
+      data: outliers.flatMap((arr, i) => arr.map(v => [i, v]))
+    };
+    ChartHub.init(id, {
+      backgroundColor: 'transparent',
+      textStyle: { fontFamily: CHART_FONT },
+      grid: { left: 58, right: 20, top: 34, bottom: 44 },
+      tooltip: ChartHub.tooltip({
+        trigger: 'item',
+        formatter: p => {
+          if(p.seriesType === 'boxplot'){
+            const v = p.value, st = stats[v[0]];
+            if(!st) return '无数据';
+            return `<div style="font-weight:700;margin-bottom:4px">${types[v[0]]}</div>
+              <div style="line-height:1.7;font-size:12px">样本 <b>${st.n}</b> 户<br>
+              上须 <b>${fmt(v[5], 1)}</b>% · Q3 <b>${fmt(v[4], 1)}</b>%<br>
+              中位数 <b style="color:#22d3ee">${fmt(v[3], 1)}</b>%<br>
+              Q1 <b>${fmt(v[2], 1)}</b>% · 下须 <b>${fmt(v[1], 1)}</b>%</div>`;
+          }
+          return `${types[p.value[0]]} 离群户：<b>${fmt(p.value[1], 1)}</b>%`;
+        }
+      }),
+      xAxis: Object.assign({ type: 'category', data: types, axisLabel: { color: CHART_THEME.text, fontSize: 10, interval: 0, rotate: 18 } }, ChartHub.axisCommon(), { splitLine: { show: false } }),
+      yAxis: Object.assign({ name: '可调比例 (%)', nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value', scale: true }, ChartHub.axisCommon()),
+      series: [
+        { name: '可调比例分布', type: 'boxplot', data: boxItems, boxWidth: [8, 34] },
+        outSeries
+      ]
+    });
+  },
+
+  /* ③ 全市 · 热力图：区县 × 业态 潜力矩阵（MW） */
+  cityHeat(id, rows){
+    if(!rows || !rows.length) return;
+    const cats = CityPotential.categories;
+    const distOrder = [...new Set(rows.map(r => r.district))];
+    const districtMeta = {};
+    rows.forEach(r => { districtMeta[r.district] = r; });
+    distOrder.sort((a, b) => (districtMeta[b].neutral || 0) - (districtMeta[a].neutral || 0));
+    const data = [], maxV = Math.max(...rows.map(r => r.potential / 1000), 0.01);
+    rows.forEach(r => {
+      data.push([cats.indexOf(r.category), distOrder.indexOf(r.district), +(r.potential / 1000).toFixed(3)]);
+    });
+    ChartHub.init(id, {
+      backgroundColor: 'transparent',
+      textStyle: { fontFamily: CHART_FONT },
+      grid: { left: 78, right: 84, top: 34, bottom: 62 },
+      tooltip: ChartHub.tooltip({
+        formatter: p => {
+          const d = p.data;
+          return `<div style="font-weight:700;margin-bottom:4px">${distOrder[d[1]]} · ${cats[d[0]]}</div>
+            <div style="font-size:12px">中性潜力 <b style="color:#22d3ee">${fmt(d[2], 3)}</b> MW<br>
+            <span style="color:#9fb0c9">占该区县 ${fmt(d[2] / Math.max(0.001, (districtMeta[distOrder[d[1]]].neutral || 0) / 1000) * 100, 1)}%</span></div>`;
+        }
+      }),
+      xAxis: Object.assign({
+        type: 'category', data: cats, splitArea: { show: false },
+        axisLabel: { color: CHART_THEME.text, fontSize: 11, interval: 0 }
+      }, ChartHub.axisCommon(), { splitLine: { show: false } }),
+      yAxis: Object.assign({
+        type: 'category', data: distOrder,
+        axisLabel: { color: CHART_THEME.text, fontSize: 9.5, interval: 0 }
+      }, ChartHub.axisCommon(), { splitLine: { show: false } }),
+      visualMap: {
+        min: 0, max: maxV, calculable: true, orient: 'vertical', right: 12, top: 'middle',
+        itemWidth: 12, itemHeight: 150, precision: 2, text: ['高', '低'],
+        textStyle: { color: CHART_THEME.text, fontSize: 10.5 },
+        inRange: { color: ['rgba(23,37,64,.55)', '#1e3a8a', '#2563eb', '#0891b2', '#06b6d4', '#fbbf24'] }
+      },
+      series: [{
+        name: '中性潜力', type: 'heatmap', data,
+        label: { show: false },
+        itemStyle: { borderColor: 'rgba(8,14,26,.85)', borderWidth: 1, borderRadius: 2 },
+        emphasis: { itemStyle: { borderColor: '#e8edf5', borderWidth: 1.4, shadowBlur: 10, shadowColor: 'rgba(0,0,0,.6)' } }
+      }]
+    });
+  },
+
+  /* ④ 协同执行 · 瀑布图：区县任务 → 初次未覆盖 → 协同承接 → 剩余缺口 → 最终可执行（kW） */
+  waterfall(id, s){
+    const steps = [
+      { name: '区县任务', from: 0, to: s.target, color: CHART_THEME.blue, kind: 'total' },
+      { name: '初次未覆盖', from: s.initial, to: s.target, color: CHART_THEME.red, kind: 'down' },
+      { name: '协同承接', from: s.initial, to: s.final, color: CHART_THEME.green, kind: 'up' },
+      { name: '剩余缺口', from: s.final, to: s.target, color: CHART_THEME.amber, kind: 'down' },
+      { name: '最终可执行', from: 0, to: s.final, color: CHART_THEME.cyan, kind: 'total' }
+    ];
+    const helper = steps.map(x => x.from);
+    const bars = steps.map(x => ({
+      value: +(x.to - x.from).toFixed(2),
+      itemStyle: {
+        color: x.kind === 'total'
+          ? { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: x.color }, { offset: 1, color: x.color + '66' }] }
+          : x.color + 'cc',
+        borderRadius: 3, borderColor: x.color, borderWidth: 1
+      }
+    }));
+    ChartHub.init(id, {
+      backgroundColor: 'transparent',
+      textStyle: { fontFamily: CHART_FONT },
+      grid: { left: 64, right: 26, top: 40, bottom: 44 },
+      tooltip: ChartHub.tooltip({
+        trigger: 'axis', axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(59,130,246,.08)' } },
+        formatter: ps => {
+          const i = ps[0].dataIndex, x = steps[i];
+          const sign = x.kind === 'up' ? '+' : x.kind === 'down' ? '−' : '';
+          return `<div style="font-weight:700;margin-bottom:4px">${x.name}</div>
+            <div style="font-size:12px">${sign}<b>${fmt(Math.abs(x.to - x.from), 1)}</b> kW<br>
+            <span style="color:#9fb0c9">区间 ${fmt(x.from, 1)} → ${fmt(x.to, 1)} kW</span></div>`;
+        }
+      }),
+      xAxis: Object.assign({ type: 'category', data: steps.map(x => x.name), axisLabel: { color: CHART_THEME.text, fontSize: 11, interval: 0 } }, ChartHub.axisCommon(), { splitLine: { show: false } }),
+      yAxis: Object.assign({ name: 'kW', nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value' }, ChartHub.axisCommon()),
+      series: [
+        { name: 'placeholder', type: 'bar', stack: 'wf', silent: true, itemStyle: { color: 'transparent' }, emphasis: { itemStyle: { color: 'transparent' } }, data: helper },
+        { name: '任务分解', type: 'bar', stack: 'wf', barWidth: '42%', data: bars,
+          label: { show: true, position: 'top', color: '#c9d6e8', fontSize: 10.5, formatter: p => { const x = steps[p.dataIndex]; return x.kind === 'total' ? fmt(x.to, 0) : (x.kind === 'up' ? '+' : '−') + fmt(Math.abs(x.to - x.from), 0); } }
+        }
+      ]
+    });
+  },
+
+  /* ⑤ 单体执行 · 双轴时序：负荷面积曲线 + 削减量柱 + 保持时段 markArea + 反弹 markPoint */
+  singleTimeline(id, timeline, meta){
+    if(!timeline || !timeline.length) return;
+    const xs = timeline.map(p => p.minute + 'm');
+    const loads = timeline.map(p => p.load);
+    const reds = timeline.map(p => Math.max(0, p.reduction));
+    const holdStart = xs[timeline.findIndex(p => p.stage === '稳定保持')];
+    const checkIdx = timeline.findIndex(p => p.stage === '效果校核');
+    const reboundIdx = timeline.findIndex(p => p.stage === '反弹校核');
+    const area = {
+      type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: 'rgba(59,130,246,.42)' }, { offset: 1, color: 'rgba(59,130,246,.02)' }]
+    };
+    ChartHub.init(id, {
+      backgroundColor: 'transparent',
+      textStyle: { fontFamily: CHART_FONT },
+      grid: { left: 62, right: 62, top: 44, bottom: 42 },
+      legend: { top: 6, left: 'center', itemWidth: 10, itemHeight: 9, textStyle: { color: CHART_THEME.text, fontSize: 11 } },
+      tooltip: ChartHub.tooltip({
+        trigger: 'axis', axisPointer: { type: 'cross', crossStyle: { color: '#5a6d85' }, label: { backgroundColor: '#1e293b' } },
+        formatter: ps => {
+          const i = ps[0].dataIndex, p = timeline[i];
+          return `<div style="font-weight:700;margin-bottom:4px">${p.stage} · ${p.minute} min</div>
+            <div style="font-size:12px;line-height:1.8">负荷 <b style="color:#60a5fa">${fmt(p.load, 2)}</b> kW<br>
+            削减 <b style="color:#22d3ee">${fmt(p.reduction, 2)}</b> kW</div>`;
+        }
+      }),
+      xAxis: Object.assign({ type: 'category', data: xs, boundaryGap: false, axisLabel: { color: CHART_THEME.text, fontSize: 10, interval: 0 } }, ChartHub.axisCommon(), { splitLine: { show: false } }),
+      yAxis: [
+        Object.assign({ name: '负荷 (kW)', nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value', scale: true }, ChartHub.axisCommon()),
+        Object.assign({ name: '削减 (kW)', nameTextStyle: { color: CHART_THEME.muted, fontSize: 11 }, type: 'value', splitLine: { show: false } }, ChartHub.axisCommon(), { splitLine: { show: false } })
+      ],
+      series: [
+        {
+          name: '负荷曲线', type: 'line', yAxisIndex: 0, data: loads, smooth: true, symbol: 'circle', symbolSize: 5,
+          lineStyle: { width: 2.6, color: CHART_THEME.blue, shadowBlur: 12, shadowColor: 'rgba(59,130,246,.45)' },
+          itemStyle: { color: '#93c5fd', borderColor: '#1d4ed8', borderWidth: 1 },
+          areaStyle: area,
+          markArea: {
+            silent: true,
+            itemStyle: { color: 'rgba(16,185,129,.10)', borderColor: 'rgba(16,185,129,.5)', borderWidth: 1, borderType: 'dashed' },
+            label: { color: '#6ee7b7', fontSize: 10.5, position: 'insideTop' },
+            data: holdStart ? [[{ xAxis: holdStart, name: '保持时段' }, { xAxis: xs[xs.length - 1] }]] : []
+          },
+          markPoint: reboundIdx > -1 ? {
+            symbol: 'pin', symbolSize: 42, data: [{ coord: [xs[reboundIdx], loads[reboundIdx]], value: fmt(loads[reboundIdx], 0), name: '反弹峰值' }],
+            itemStyle: { color: CHART_THEME.amber }, label: { color: '#111827', fontSize: 9.5, fontWeight: 700 }
+          } : undefined
+        },
+        {
+          name: '削减量', type: 'bar', yAxisIndex: 1, data: reds, barWidth: '46%',
+          itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(6,182,212,.85)' }, { offset: 1, color: 'rgba(6,182,212,.18)' }] }, borderRadius: [3, 3, 0, 0] }
+        }
+      ]
+    });
+  }
+};
 
 const DistrictAlloc = {
   GROUPS: {
@@ -2469,6 +2763,12 @@ const CityPotential={
         <div class="panel-body">${topBars}</div></div>
     </div>
     <div class="panel">
+      <div class="panel-header"><h3>区县 × 业态 潜力热力图</h3><span style="font-size:12.5px;color:var(--text-muted)">颜色越亮潜力越大（MW）· 按区县中性潜力降序 · 悬停查看明细</span></div>
+      <div class="panel-body"><div id="chCityHeat" style="width:100%;height:740px"></div>
+        <div class="calc-note" style="margin-top:6px">横向看业态结构差异（商业综合体与办公写字楼占比最高），纵向看区县能级差异（第一梯队整体亮度明显高于第五梯队）。</div>
+      </div>
+    </div>
+    <div class="panel">
       <div class="panel-header"><h3>测算结果与过程追溯</h3>
         <div class="tabs" style="margin:0">
           ${[['districts','区县结果'],['tiers','梯队汇总'],['process','过程明细']].map(([k,l])=>`<button class="tab-btn ${this.tab===k?'active':''}" onclick="CityPotential.switchTab('${k}')">${l}</button>`).join('')}
@@ -2533,6 +2833,12 @@ const CityPotential={
     ${this.sensitivityView()}
 `;
     this.renderTab();
+    this.renderCharts();
+  },
+  renderCharts(){
+    if(typeof echarts === 'undefined') return;
+    const rows = this.processRows().filter(r => this.tier === '全部' || r.tier === this.tier);
+    ChartBuilders.cityHeat('chCityHeat', rows);
   },
   switchTab(tab){this.tab=tab;this.render();},
   setMode(mode){this.mode=mode;this.dispatchOverride=null;this.render();showToast(mode==='standard'?'已切换至标准口径':'已联动楼宇台账当前情景');},
