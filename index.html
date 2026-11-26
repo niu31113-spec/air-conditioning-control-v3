@@ -303,6 +303,43 @@ function showToast(msg,type){
 function fmt(v,d){d=d??2;const n=parseFloat(v);return isNaN(n)?v:n.toFixed(d)}
 function fmtInt(v){return Math.round(v).toLocaleString()}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* 重渲染会整体替换 innerHTML，替换瞬间页面高度归零，浏览器把滚动位置钳到页首，
+   导致「改一格参数 → 视线跳回顶部」。这里在渲染前记下滚动位置与焦点输入框，
+   渲染后原样还原，做到改完还停在原来那一行。 */
+const ScrollKeeper={
+  /* 实际滚动容器是 main.main（overflow:auto），不是 document —— 记错容器就还原不了 */
+  _box(){return document.querySelector('main.main')||document.scrollingElement||document.documentElement;},
+  capture(){
+    if(this._skip){this._skip=false;return null;}
+    const box=this._box();
+    const y=box?box.scrollTop:0;
+    const a=document.activeElement;
+    let key=null,pos=null,innerY=0;
+    if(a&&a.dataset&&a.dataset.fkey){
+      key=a.dataset.fkey;
+      try{pos=a.selectionStart;}catch(e){pos=null;}
+      const w=a.closest('.data-table-wrapper');
+      if(w)innerY=w.scrollTop;
+    }
+    return {y,key,pos,innerY};
+  },
+  /* 切标签/换区县属于整屏换内容，保持原滚动位置反而容易停到半空，这里主动放弃还原 */
+  skipNext(){this._skip=true;const b=this._box();if(b)b.scrollTop=0;},
+  restore(snap,root){
+    if(!snap)return;
+    const box=this._box();
+    if(box&&snap.y>0)box.scrollTop=snap.y;
+    if(snap.key){
+      const t=(root||document).querySelector('[data-fkey="'+snap.key+'"]');
+      if(t){
+        try{t.focus({preventScroll:true});}catch(e){try{t.focus();}catch(e2){}}
+        if(snap.pos!=null){try{t.setSelectionRange(snap.pos,snap.pos);}catch(e){}}
+        if(snap.innerY>0){const w=t.closest('.data-table-wrapper');if(w)w.scrollTop=snap.innerY;}
+      }
+    }
+    if(box&&snap.y>0)box.scrollTop=snap.y;
+  }
+};
 const NAV_ITEMS=[
   {section:'基础数据层',items:[{page:'ledger',icon:'🏢',label:'楼宇库·可调潜力'},{page:'citypotential',icon:'📈',label:'全市可调潜力推算'}]},
   {section:'潜力与分配层',items:[{page:'district',icon:'🗺️',label:'区县可调潜力分配'}]},
@@ -324,6 +361,9 @@ function navigateTo(page){
   if(page==='citypotential')CityPotential.render();
   if(page==='district')DistrictAlloc.init();
   if(page==='aggregate')Aggregate.render();
+  /* 真正滚动的是 main.main（overflow:auto），window.scrollTo 对它无效，换页会停在上一页的位置 */
+  const _main=document.querySelector('main.main');
+  if(_main)_main.scrollTop=0;
   window.scrollTo(0,0);
 }
 
@@ -543,7 +583,10 @@ const PotentialEngine={
       potential:Math.round(actualPotential*100)/100,
       potentialPct:Math.round(actualPotential/P*1000)/10,
       maxPotential:Math.round(maxPotential*100)/100,
-      capped:actualPotential>maxPotential,
+      /* 超上限判定留 5.5% 容差：台账口径里「安全可调上限」本身就是可调潜力的 95%
+         （61 栋中 28 栋严格等于 0.95×标杆），拿潜力直接比它必然 100% 触发，
+         属于空警报。只有潜力比上限高出 5% 以上（两列口径真的不一致）才提示。 */
+      capped:actualPotential>maxPotential*1.055,
       ampCapped:rawPotential>P+1e-9,
       rawPotential:Math.round(rawPotential*100)/100,
       ampGain:Math.round(ampGain*1000)/1000,
@@ -1579,6 +1622,7 @@ const Ledger={
   },
   render(){
     const el=document.getElementById('page-ledger');
+    const _sk=ScrollKeeper.capture();
     /* 计算参数已并入「单栋模型参数依据」块：重渲染前记住展开态，避免调参后自动收起 */
     const pBlock=document.getElementById('lgParamBlock');
     if(pBlock)this.paramOpen=pBlock.open;
@@ -1660,6 +1704,11 @@ const Ledger={
           　<b>该口径在 1℃ 处最可靠</b>，2℃ 属线性外推、偏乐观，仅用于情景推演（区县分配走策略库，按参与区域比例另算）。
           　改「当前设定」的可见作用是<b>舒适区合规校验</b>：设定温度＋采用上调越过舒适上限时，该行「风险提示」变橙并给出越界温度。
         </div>
+        <div style="padding:7px 14px;font-size:11.5px;line-height:1.9;color:var(--text-muted);border-bottom:1px solid var(--border);display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+          <span style="font-weight:700;color:var(--text-secondary)">🟡 两种标色，含义不同：</span>
+          <span><span class="badge badge-yellow">提示·口径不一致</span> 情景潜力比台账安全上限高 5% 以上（正常台账里上限＝潜力×95%，超出说明两列口径不一致，建议复核）—— 只标注<b>不裁剪</b>，不影响合计</span>
+          <span><span class="badge badge-orange">超舒适区 +1℃</span> 设定温度＋采用上调越过舒适上限 —— 属合规校验，<b>也不影响潜力</b></span>
+        </div>
         <div class="data-table-wrapper">
           <table class="data-table">
             <thead><tr>
@@ -1685,17 +1734,17 @@ const Ledger={
                   <td>${b.district}</td>
                   <td><span class="badge ${b.userType==='柔性调节'?'badge-green':'badge-orange'}">${b.userType}</span></td>
                   <td class="num">${fmtInt(b.baseLoad)}</td>
-                  <td><select class="form-select" style="min-width:88px;padding:4px" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'incentive',this.value)"><option ${b.incentive==='有激励'?'selected':''}>有激励</option><option ${b.incentive==='无激励'?'selected':''}>无激励</option></select></td>
-                  <td><input class="form-input" style="width:70px;padding:4px${(!b.hasTempField||r.comfortExcess>0)?';border-color:var(--orange)':''}" type="number" step="0.5" value="${b.setTemp}" title="${!b.hasTempField?'未采集实测值，按 '+b.setTemp+'℃ 默认值：':(r.comfortExcess>0?'⚠ 设定 '+b.setTemp+'℃ + 采用上调 '+b.tempOffset+'℃ = '+(Math.round((b.setTemp+b.tempOffset)*10)/10)+'℃，超出舒适上限 '+r.comfortHigh+'℃：':'实测值：')}该字段只做基准工况与舒适区校验，不改变情景潜力" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'setTemp',this.value)"></td>
+                  <td><select class="form-select" style="min-width:88px;padding:4px" onclick="event.stopPropagation()" data-fkey="i-${b.id}" onchange="Ledger.updateBuilding(${b.id},'incentive',this.value)"><option ${b.incentive==='有激励'?'selected':''}>有激励</option><option ${b.incentive==='无激励'?'selected':''}>无激励</option></select></td>
+                  <td><input class="form-input" style="width:70px;padding:4px${(!b.hasTempField||r.comfortExcess>0)?';border-color:var(--orange)':''}" type="number" step="0.5" value="${b.setTemp}" title="${!b.hasTempField?'未采集实测值，按 '+b.setTemp+'℃ 默认值：':(r.comfortExcess>0?'⚠ 设定 '+b.setTemp+'℃ + 采用上调 '+b.tempOffset+'℃ = '+(Math.round((b.setTemp+b.tempOffset)*10)/10)+'℃，超出舒适上限 '+r.comfortHigh+'℃：':'实测值：')}该字段只做基准工况与舒适区校验，不改变情景潜力" onclick="event.stopPropagation()" data-fkey="t-${b.id}" onchange="Ledger.updateBuilding(${b.id},'setTemp',this.value)"></td>
                   <td class="num" style="color:${b.hasComfortField?'var(--text-muted)':'var(--orange)'}">${b.hasComfortField?b.comfort:'待采集'}</td>
-                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" value="${b.maxTempOffset}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'maxTempOffset',this.value)"></td>
-                  <td><input class="form-input" style="width:70px;padding:4px${r.comfortExcess>0?';border-color:var(--orange)':''}" type="number" step="0.5" min="0" max="${b.maxTempOffset}" value="${b.tempOffset}" title="潜力的唯一放大来源：以 1℃ 实测标定为基准按 Δt 线性放大（2℃→2.00×）。1℃ 处最可靠，2℃ 为外推值、偏乐观" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'tempOffset',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" value="${b.maxTempOffset}" onclick="event.stopPropagation()" data-fkey="m-${b.id}" onchange="Ledger.updateBuilding(${b.id},'maxTempOffset',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" max="${b.maxTempOffset}" value="${b.tempOffset}" title="潜力的唯一放大来源：以 1℃ 实测标定为基准按 Δt 线性放大（2℃→2.00×）。1℃ 处最可靠，2℃ 为外推值、偏乐观" onclick="event.stopPropagation()" data-fkey="o-${b.id}" onchange="Ledger.updateBuilding(${b.id},'tempOffset',this.value)"></td>
                   <td class="num">${b.sourcePotential===undefined?'<span style="color:var(--orange)">无实测</span>':fmtInt(b.sourcePotential)}</td>
                   <td class="num" style="font-weight:700;color:var(--accent-cyan);font-size:14px" title="实测标杆 ${fmt(b.sourcePotential||0,1)} kW × 温度修正 × 响应修正 × 采用上调 ${r.ampGain}℃${r.ampCapped?'（解算值已超基准负荷，按基准负荷封顶）':''}">${fmt(r.potential,1)}${r.ampCapped?'<span style="font-size:10px;color:var(--orange);margin-left:2px">封顶</span>':''}</td>
                   <td class="num">${r.potentialPct}%</td>
                   <td>${r.comfortExcess>0
-                    ?`<span class="badge badge-orange" title="设定 ${b.setTemp}℃ ＋ 采用上调 ${b.tempOffset}℃ 超出舒适上限 ${r.comfortHigh}℃；合规需把设定温度降到 ${Math.round((r.comfortHigh-b.tempOffset)*10)/10}℃ 以内，或减少上调幅度">超舒适区 +${r.comfortExcess}℃</span>`
-                    :(r.capped?'<span class="badge badge-orange" title="潜力超过台账安全上限，仅提示不裁剪（实测标杆口径优先）">风险提示·超上限</span>':'<span class="badge badge-green">正常</span>')}</td>
+                    ?`<span class="badge badge-orange" title="设定 ${b.setTemp}℃ ＋ 采用上调 ${b.tempOffset}℃ 超出舒适上限 ${r.comfortHigh}℃；合规需把设定温度降到 ${Math.round((r.comfortHigh-b.tempOffset)*10)/10}℃ 以内，或减少上调幅度。该提示不影响情景潜力">超舒适区 +${r.comfortExcess}℃</span>`
+                    :(r.capped?`<span class="badge badge-yellow" title="情景潜力 ${fmt(r.potential,0)} kW 比台账安全上限 ${fmt(r.maxPotential,0)} kW 高出 ${fmt((r.potential/r.maxPotential-1)*100,1)}%（正常台账里上限＝潜力的 95%，超 5% 以上说明两列口径不一致，建议复核该楼台账）。只标注不裁剪，合计仍按 ${fmt(r.potential,0)} kW 计入">提示·口径不一致</span>`:'<span class="badge badge-green">正常</span>')}</td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -1708,6 +1757,7 @@ const Ledger={
     ${SurveyModule.render()}
     ${this.modelPrinciple()}`;
     this.renderCharts(results, filtered);
+    ScrollKeeper.restore(_sk, el);
   },
   renderCharts(results, filtered){
     if(typeof echarts === 'undefined') return;
@@ -1782,7 +1832,7 @@ const Ledger={
       <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
         <div class="stat-card"><div class="stat-icon cyan">📊</div><div class="stat-value" style="font-size:20px">${fmt(r.potential,1)}</div><div class="stat-label">可调潜力 (kW)</div></div>
         <div class="stat-card"><div class="stat-icon purple">%</div><div class="stat-value" style="font-size:20px">${r.potentialPct}%</div><div class="stat-label">占基准负荷比例</div></div>
-         <div class="stat-card"><div class="stat-icon ${(r.capped||r.comfortExcess>0)?'orange':'green'}">${(r.capped||r.comfortExcess>0)?'⚠️':'✅'}</div><div class="stat-value" style="font-size:20px">${r.comfortExcess>0?'超舒适区':(r.capped?'风险提示':'正常')}</div><div class="stat-label">${r.comfortExcess>0?`舒适上限 ${r.comfortHigh}℃ · 超出 ${r.comfortExcess}℃`:`安全上限 ${fmt(r.maxPotential,1)} kW · 仅提示不裁剪`}</div></div>
+         <div class="stat-card"><div class="stat-icon ${(r.capped||r.comfortExcess>0)?'orange':'green'}">${(r.capped||r.comfortExcess>0)?'⚠️':'✅'}</div><div class="stat-value" style="font-size:20px">${r.comfortExcess>0?'超舒适区':(r.capped?'口径待核':'正常')}</div><div class="stat-label">${r.comfortExcess>0?`舒适上限 ${r.comfortHigh}℃ · 超出 ${r.comfortExcess}℃`:(r.capped?`潜力比安全上限 ${fmt(r.maxPotential,1)} kW 高 5% 以上 · 仅提示不裁剪`:`安全上限 ${fmt(r.maxPotential,1)} kW · 仅提示不裁剪`)}</div></div>
       </div>
       <div class="modal-actions"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">关闭</button></div>
     </div>`;
@@ -2032,7 +2082,7 @@ const Ledger={
     results.forEach((r,i)=>{
       const b=rows[i];
       csv+=[b.id,b.name,b.type,b.acType,b.district,b.capacity,b.baseLoad,b.sourcePotential??'',b.safeLimit??'',b.priority,
-        this.outdoorTemp,b.setTemp,this.incentive==='按楼宇配置'?b.incentive:this.incentive,b.maxTempOffset,Math.min(this.tempMode==='building'?b.tempOffset:this.tempOffset,b.maxTempOffset),fmt(r.potential,2),r.potentialPct+'%',r.capped?'风险提示·超上限':'正常'].map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')+'\n';
+        this.outdoorTemp,b.setTemp,this.incentive==='按楼宇配置'?b.incentive:this.incentive,b.maxTempOffset,Math.min(this.tempMode==='building'?b.tempOffset:this.tempOffset,b.maxTempOffset),fmt(r.potential,2),r.potentialPct+'%',r.comfortExcess>0?`超舒适区+${r.comfortExcess}℃`:(r.capped?'提示·口径不一致':'正常')].map(x=>'"'+String(x??'').replace(/"/g,'""')+'"').join(',')+'\n';
     });
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
     a.download='楼宇可调潜力计算结果_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
@@ -2492,6 +2542,7 @@ const Aggregate={
   },
   render(){
     const el=document.getElementById('page-aggregate');
+    const _sk=ScrollKeeper.capture();
     this.computeSynergy();this.synergyInited=true;
     el.innerHTML=`
     <div class="page-header">
@@ -2512,8 +2563,9 @@ const Aggregate={
     this.renderTab();
     const embed=document.getElementById('stratlibEmbed');
     if(embed)StrategyLib.render(embed);
+    ScrollKeeper.restore(_sk, el);
   },
-  switchTab(t){this.tab=t;this.render();},
+  switchTab(t){ScrollKeeper.skipNext();this.tab=t;this.render();},
   renderTab(){
     const body=document.getElementById('agTabBody');
     if(!body)return;
@@ -2789,7 +2841,7 @@ const Aggregate={
     const cards=keys.map(k=>{
       const p=this.synergyParams[k], a=adv.map[k];
       return `<div class="param-card"><h3>${k}</h3>
-          <div class="value-row"><input type="number" step="0.001" min="${p.min}" max="${p.max}" value="${p.value}" data-synergy-param="${k}" onchange="Aggregate.setSynergyParam(this)"><span class="unit">${p.unit}</span></div>
+          <div class="value-row"><input type="number" step="0.001" min="${p.min}" max="${p.max}" value="${p.value}" data-synergy-param="${k}" data-fkey="sp-${k}" onchange="Aggregate.setSynergyParam(this)"><span class="unit">${p.unit}</span></div>
           <div class="desc">${p.desc}　·　可调 <b style="color:var(--text-secondary)">${Number(p.min).toFixed(2)}~${Number(p.max).toFixed(2)}</b></div>
           ${a?`<div class="adv-line ${Math.abs(a.v-p.value)<1e-6?'same':''}">建议 <b>${a.v}</b><span>${a.note}</span></div>`:''}</div>`;
     }).join('');
@@ -3710,6 +3762,7 @@ const DistrictAlloc = {
   render() {
     ChartHub.disposeAll();
     const el = document.getElementById('page-district');
+    const _sk = ScrollKeeper.capture();
     const totalPot = this.districts.reduce((s,d) => s + d.potential, 0);
     const surplus = this.districts.filter(d => d.status === '富余').length;
     const deficit = this.districts.filter(d => d.status === '缺口').length;
@@ -3818,8 +3871,9 @@ const DistrictAlloc = {
       </div>
     </details>`;
     this.renderTab();
+    ScrollKeeper.restore(_sk, el);
   },
-  switchTab(t) { this.tab = t; this.render(); },
+  switchTab(t) { ScrollKeeper.skipNext(); this.tab = t; this.render(); },
   selectScheme(scheme) {
     this.selectedScheme = scheme;
     this.compute();
@@ -4016,7 +4070,7 @@ const DistrictAlloc = {
         return `
           <div class="param-card" style="border-left:3px solid ${tone}">
             <div class="phead"><span class="psym" style="color:${tone};border-color:${tone}">${p.sym}</span><span class="pname">${p.label}</span></div>
-            <div class="value-row"><input type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${p.value}" data-param="${k}" onchange="DistrictAlloc.setParam(this)"><span class="unit">${p.unit}</span></div>
+            <div class="value-row"><input type="number" step="${p.step}" min="${p.min}" max="${p.max}" value="${p.value}" data-param="${k}" data-fkey="dp-${k}" onchange="DistrictAlloc.setParam(this)"><span class="unit">${p.unit}</span></div>
             <div class="prange">${p.min} ~ ${p.max}</div>
           </div>`;}).join('');
       /* 目标匹配度：削峰目标 vs 常规能力上限（ΣμQ_i），直接回答"目标与系数有没有关系" */
@@ -4586,6 +4640,7 @@ const CityPotential={
   sensitivityView(open){const s=this.sensitivity,t=this.sensitivityTotals(),pct=(v,b)=>`${v>=b?'+':''}${fmt((v/b-1)*100,1)}%`;const controls=[['volume','总量系数',s.volume,'影响中性潜力（规模/覆盖/衰减合一）'],['conservative','保守情景系数',s.conservative,'仅影响保守结果'],['dispatch','可下发比例',s.dispatch,'仅影响可下发结果']];return `<details id="sensPanel" class="calc-logic nested-model"${open?' open':''}><summary>改假设会怎样 · 敏感性 <span class="calc-hint">总量系数 / 保守系数 / 下发比例 · 不覆盖标准口径</span></summary><div class="calc-body"><div class="info-box"><strong>用途：</strong>回答“某个参数变化后结果会变多少”。这里单独形成情景结果，不改动标准汇总，也不把工程假设包装成实测结论。总量系数 = 楼宇规模 × 覆盖率 × 衰减系数，三者对中性潜力是等效连乘，合并为一个参数（默认 1.00）。参数来源与可信档见上方「全市外推模型」内的<b>参数解析</b>。</div><div class="form-row">${controls.map(([k,n,v,h])=>`<div class="form-group"><label>${n}</label><input class="form-input" type="number" min="0.1" max="2" step="0.01" value="${v}" onchange="CityPotential.setSensitivity('${k}',this.value)"><span style="font-size:12.5px;color:var(--text-muted)">${h}</span></div>`).join('')}<button class="btn btn-outline btn-sm" onclick="CityPotential.resetSensitivity()">恢复基准</button></div><div class="data-table-wrapper"><table class="data-table"><thead><tr><th>结果</th><th>标准口径(MW)</th><th>敏感性情景(MW)</th><th>变化</th><th>主要驱动</th></tr></thead><tbody><tr><td>中性潜力</td><td>${fmt(this.mw(t.base),1)}</td><td>${fmt(this.mw(t.neutral),1)}</td><td>${pct(t.neutral,t.base)}</td><td>总量系数</td></tr><tr><td>保守潜力</td><td>${fmt(this.mw(t.base*.66),1)}</td><td>${fmt(this.mw(t.conservative),1)}</td><td>${pct(t.conservative,t.base*.66)}</td><td>中性潜力 × 保守系数</td></tr><tr><td>可下发量</td><td>${fmt(this.mw(t.base*.20),1)}</td><td>${fmt(this.mw(t.dispatch),1)}</td><td>${pct(t.dispatch,t.base*.20)}</td><td>中性潜力 × 可下发比例</td></tr></tbody></table></div><div class="calc-note">线性模型下，总量系数变化 10%，中性、保守、可下发三行同步变化 10%；保守系数与下发比例各自只影响对应行。该分析用于边界判断，不代表统计置信区间。</div></div></details>`;},
   render(){
     const el=document.getElementById('page-citypotential');
+    const _sk=ScrollKeeper.capture();
     const districts=this.districtRows();
     const benchmarks=this.benchmarks();
     const total=this.totals();
@@ -4639,8 +4694,8 @@ const CityPotential={
         <div class="stat-card"><div class="stat-icon purple">📉</div><div class="stat-value">${fmt(this.mw(total.neutral),1)}</div><div class="stat-label">全市可调潜力 (MW)</div><div class="stat-change up">最保守 ${fmt(this.mw(total.conservative),1)} MW</div></div>
         <div class="stat-card"><div class="stat-icon orange">🎯</div><div class="stat-value" id="cityDispatch20Val">${fmt(this.mw(total.dispatch20),1)}</div><div class="stat-label">本期下发 (MW)</div><div class="stat-change up">占全市可调 ${fmt(dispatchVsNeutral,1)}%</div>
           <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
-            <input type="number" class="form-input" style="width:60px;font-size:12px;padding:4px 6px" value="${Math.round(this.dispatchRatio*100)}" min="5" max="50" step="1" onchange="CityPotential.setDispatchRatio(this.value)" title="调节比例"><span style="font-size:12.5px;color:var(--text-muted)">%</span>
-            <input type="number" class="form-input" style="width:80px;font-size:12px;padding:4px 6px" value="${fmt(this.mw(total.dispatch20),1)}" step="0.1" onchange="CityPotential.setDispatchValue(this.value)" title="直接修改数值"><span style="font-size:12.5px;color:var(--text-muted)">MW</span>
+            <input type="number" class="form-input" style="width:60px;font-size:12px;padding:4px 6px" value="${Math.round(this.dispatchRatio*100)}" min="5" max="50" step="1" data-fkey="cp-ratio" onchange="CityPotential.setDispatchRatio(this.value)" title="调节比例"><span style="font-size:12.5px;color:var(--text-muted)">%</span>
+            <input type="number" class="form-input" style="width:80px;font-size:12px;padding:4px 6px" value="${fmt(this.mw(total.dispatch20),1)}" step="0.1" data-fkey="cp-value" onchange="CityPotential.setDispatchValue(this.value)" title="直接修改数值"><span style="font-size:12.5px;color:var(--text-muted)">MW</span>
           </div></div>
       </div>
     </div></div>
@@ -4709,8 +4764,9 @@ const CityPotential={
 `;
     ChartBuilders.cityPareto('chCityPareto', pRows);
     this.renderTab();
+    ScrollKeeper.restore(_sk, el);
   },
-  switchTab(tab){this.tab=tab;this.render();},
+  switchTab(tab){ScrollKeeper.skipNext();this.tab=tab;this.render();},
   setTier(tier){this.tier=tier;this.render();},
   renderTab(){
     const body=document.getElementById('cityPotentialTab');
