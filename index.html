@@ -381,6 +381,8 @@ const PotentialEngine={
   },
   /* 附件6 逐栋样本 K：样本楼优先用原表值，新增/未标定楼回退 K_MATRIX 业态均值 */
   K_EXACT:{"华岩镇人民政府办公楼":{"system":"VRF","sp":{"24":{"30-34℃":0.12,"35-39℃":0.17,"40+℃":0.09},"25":{"30-34℃":0.07,"35-39℃":0.11,"40+℃":0.07},"26":{"30-34℃":0.04,"35-39℃":0.09,"40+℃":0.06}}},"北碚科技创业中心":{"system":"VRF","sp":{"24":{"30-34℃":0.08,"35-39℃":0.29,"40+℃":0.09},"25":{"30-34℃":0.07,"35-39℃":0.22,"40+℃":0.07},"26":{"30-34℃":0.05,"35-39℃":0.2,"40+℃":0.06}}},"重庆市市政府2号楼":{"system":"VRF","sp":{"24":{"30-34℃":0.2,"35-39℃":0.23,"40+℃":0.09},"25":{"30-34℃":0.16,"35-39℃":0.19,"40+℃":0.07},"26":{"30-34℃":0.3,"35-39℃":0.16,"40+℃":0.06}}},"环球大厦":{"system":"VRF","sp":{"24":{"30-34℃":0.11,"35-39℃":0.25,"40+℃":0.11},"25":{"30-34℃":0.08,"35-39℃":0.2,"40+℃":0.09},"26":{"30-34℃":0.06,"35-39℃":0.11,"40+℃":0.07}}},"龙湖西城天街":{"system":"VRF","sp":{"24":{"30-34℃":0.19,"35-39℃":0.14,"40+℃":0.11},"25":{"30-34℃":0.16,"35-39℃":0.1,"40+℃":0.08},"26":{"30-34℃":0.14,"35-39℃":0.1,"40+℃":0.06}}},"兰里酒店":{"system":"VRF","sp":{"24":{"30-34℃":0.13,"35-39℃":0.13,"40+℃":0.12},"25":{"30-34℃":0.15,"35-39℃":0.1,"40+℃":0.08},"26":{"30-34℃":0.1,"35-39℃":0.08,"40+℃":0.08}}},"江城名都1号楼":{"system":"VRF","sp":{"24":{"30-34℃":0.13,"35-39℃":0.13,"40+℃":0.12},"25":{"30-34℃":0.15,"35-39℃":0.1,"40+℃":0.08},"26":{"30-34℃":0.1,"35-39℃":0.08,"40+℃":0.08}}},"华熙超市":{"system":"VRF","sp":{"24":{"30-34℃":0.18,"35-39℃":0.18,"40+℃":0.08},"25":{"30-34℃":0.11,"35-39℃":0.13,"40+℃":0.06},"26":{"30-34℃":0.07,"35-39℃":0.11,"40+℃":0.05}}},"恒大中渝广场（写字楼）":{"system":"WC","sp":{"24":{"30-34℃":0.09,"35-39℃":0.17,"40+℃":0.14},"25":{"30-34℃":0.07,"35-39℃":0.11,"40+℃":0.12},"26":{"30-34℃":0.07,"35-39℃":0.06,"40+℃":0.1}}},"恒大中渝广场（商场）":{"system":"WC","sp":{"21":{"30-34℃":0.12,"35-39℃":0.1,"40+℃":0.12},"22":{"30-34℃":0.1,"35-39℃":0.09,"40+℃":0.08},"23":{"30-34℃":0.06,"35-39℃":0.07,"40+℃":0.06}}},"红星美凯龙":{"system":"WC","sp":{"24":{"30-34℃":0.15,"35-39℃":0.18,"40+℃":0.15},"25":{"30-34℃":0.11,"35-39℃":0.17,"40+℃":0.11},"26":{"30-34℃":0.08,"35-39℃":0.16,"40+℃":0.1}}},"万象城":{"system":"WC","sp":{"21":{"30-34℃":0.12,"35-39℃":0.1,"40+℃":0.12},"22":{"30-34℃":0.1,"35-39℃":0.09,"40+℃":0.08},"23":{"30-34℃":0.06,"35-39℃":0.07,"40+℃":0.06}}},"宜家家居":{"system":"WC","sp":{"24":{"30-34℃":0.15,"35-39℃":0.18,"40+℃":0.15},"25":{"30-34℃":0.11,"35-39℃":0.17,"40+℃":0.11},"26":{"30-34℃":0.08,"35-39℃":0.16,"40+℃":0.1}}},"空港工业园":{"system":"WC","sp":{"24":{"30-34℃":0.07,"35-39℃":0.14,"40+℃":0.13},"25":{"30-34℃":0.06,"35-39℃":0.1,"40+℃":0.07},"26":{"30-34℃":0.05,"35-39℃":0.06,"40+℃":0.05}}}},
+  /* 标定表与台账的楼宇名称可能只差空格，匹配前统一去空白 */
+  normName(s){return String(s==null?'':s).replace(/[\s\u3000]/g,'');},
   // 用户响应系数α：无激励 / 有激励，来自计算说明书表3（26℃基准）
   ALPHA_TABLE:{
     '党政机关':{'无激励':0.075,'有激励':0.10},
@@ -434,8 +436,11 @@ const PotentialEngine={
     const raw=Number.isFinite(setTemp)?Number(setTemp):26;
     const sp=Math.min(Math.max(raw,allSp[0]),allSp[allSp.length-1]);
     const airFallback=ac.includes('风冷')&&!ac.includes('多联机')&&!ac.includes('冷水');
-    /* 附件6 有逐栋标定的样本楼直接用原表值 */
-    const exact=this.K_EXACT[building.name];
+    /* 附件6 有逐栋标定的样本楼直接用原表值。
+       名称需归一化后匹配：标定表写作「重庆市市政府2号楼」，台账写作「重庆市市政府 2 号楼」，
+       直接查表会漏配并回退到业态均值（0.125，而本楼标定为 0.16）。 */
+    const exact=this.K_EXACT[building.name]
+      ||this.K_EXACT[Object.keys(this.K_EXACT).find(k=>this.normName(k)===this.normName(building.name))];
     if(exact&&exact.system===system){
       const exSp=Object.keys(exact.sp).map(Number);
       const near=exSp.reduce((a,b)=>Math.abs(b-raw)<Math.abs(a-raw)?b:a,exSp[0]);
@@ -1686,9 +1691,30 @@ const Ledger={
     </div>
 
     <div class="panel">
-      <div class="panel-header"><h3>楼宇潜力分布</h3><span style="font-size:12.5px;color:var(--text-muted)">越靠右上，越值得优先调控</span></div>
-      <div class="panel-body"><div id="chLedgerScatter" style="width:100%;height:430px"></div>
-        <div class="calc-note" style="margin-top:6px;font-size:12px;color:var(--text-muted)">点气泡 → 明细表仅显示该楼（表头可恢复全部） · 虚线＝均值 · 空心圈＝无激励 · <b style="color:var(--warning)">↑</b>＝超出量程</div>
+      <div class="panel-header"><h3>逐时可调潜力 · 三图联动</h3><span style="font-size:12.5px;color:var(--text-muted)">静态代理口径 · 分时形态取自技术报告表4.1，非逐点实测</span></div>
+      <div class="panel-body">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:rgba(42,74,127,.10);border-radius:7px">
+          <button class="btn btn-outline btn-sm" onclick="RtPotential.play()" id="rtPlayBtn">▶ 播放</button>
+          <input id="rtPoint" type="range" min="0" max="95" value="68" step="1" style="flex:1;min-width:260px" oninput="RtPotential.onSlide(this.value)">
+          <span id="rtTimeLabel" style="font-size:16px;color:var(--accent-cyan);font-weight:600;min-width:52px">17:00</span>
+          <select id="rtMode" class="form-input" style="width:auto" onchange="RtPotential.onMode(this.value)">
+            <option value="current">当前配置</option><option value="noinc">全部无激励</option><option value="low">低设定温度</option>
+          </select>
+          <span id="rtSumHint" style="font-size:11.5px;color:var(--text-muted)"></span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">① 全市逐时可调潜力（kW） · 竖线＝当前时刻</div>
+        <div id="chRtCurve" style="width:100%;height:250px"></div>
+        <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:12px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">② 楼宇 × 24h 可调热力图 · 颜色越暖可调越大 · 蓝线＝当前时刻</div>
+            <div id="chRtHeat" style="width:100%;height:980px"></div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">③ 当前时刻资源池排序 · 前15栋及累计占比</div>
+            <div id="chRtPool" style="width:100%;height:980px"></div>
+          </div>
+        </div>
+        <div class="calc-note" style="margin-top:8px;font-size:12px;color:var(--text-muted)">口径：P<sub>i</sub>(t)＝台账潜力 × 分时系数 f(t)（17:00＝1.0）× 情景倍数。形态来自技术报告表4.1 三个温度段均值，96 点由 24 点线性插值；<b style="color:var(--warning)">非逐点实测</b>，接入 61 栋实时负荷与气象后自动切换。静态报表数字不受本图影响。</div>
       </div>
     </div>
 
@@ -1766,7 +1792,8 @@ const Ledger={
       const effInc = this.incentive === '按楼宇配置' ? b.incentive : this.incentive;
       return { id: b.id, name: b.name, type: b.type, acType: b.acType, district: b.district, baseLoad: b.baseLoad, potential: r.potential, potentialPct: parseFloat(r.potentialPct) || 0, noInc: effInc === '无激励' };
     });
-    ChartBuilders.ledgerScatter('chLedgerScatter', rows);
+    RtPotential.rows = rows;
+    RtPotential.render();
   },
   updateParams(){
     const outdoor=parseFloat(document.getElementById('lgOutdoor').value);
@@ -3214,6 +3241,162 @@ const CHART_THEME = {
   red: '#ef4444', purple: '#8b5cf6', gray: '#94a3b8', grayBar: 'rgba(90,109,133,.32)'
 };
 const CHART_FONT = "'Microsoft YaHei','Noto Sans SC',sans-serif";
+/* ============================================================
+   静态代理 · 逐时可调潜力 RtPotential
+   口径：台账潜力 × 技术报告表4.1 分时形态（17:00 锚点 = 1.0）
+   说明：分时形态来自报告的时段均值，非逐点实测；接入 96 点数据后替换本模块数据源即可
+============================================================ */
+const RtPotential = {
+  SHAPE24: [230,210,195,185,190,220,470,900,1198,1350,1680,1850,1720,1650,1900,2250,2560,2651,2420,1980,1500,1050,720,420],
+  MODES: {
+    current: { label: '当前配置', mult: 1.0, color: '#06b6d4' },
+    noinc:   { label: '无激励情景', mult: 0.545, color: '#f59e0b' },
+    low:     { label: '低设定温度', mult: 1.88, color: '#3b82f6' }
+  },
+  BASE_HOUR: 17,
+  mode: 'current',
+  point: 68,
+  rows: [],
+  shape96(){
+    const s=this.SHAPE24,out=[];
+    for(let p=0;p<96;p++){
+      const h=p/4,i=Math.floor(h),j=Math.min(23,i+1),w=h-i;
+      out.push(s[i]*(1-w)+s[j]*w);
+    }
+    return out;
+  },
+  fmtTime(p){ const h=Math.floor(p/4),m=(p%4)*15;return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); },
+  factorAt(p){ const s=this._s96||(this._s96=this.shape96());return s[p]/s[this.BASE_HOUR*4]; },
+  nowMult(){ return (this.MODES[this.mode]||this.MODES.current).mult; },
+  hourOf(p){ return Math.floor(p/4); },
+  /* 全市 96 点曲线：三条情景线，合计基于当前筛选后的台账潜力 */
+  citySeries(){
+    const s=this._s96||(this._s96=this.shape96()),base=s[this.BASE_HOUR*4];
+    const sum=this.rows.reduce((a,r)=>a+(Number(r.potential)||0),0);
+    const mk=m=>s.map(v=>Math.round(sum*v/base*m));
+    const cnt=this.rows.length;
+    return { labels:s.map((_,p)=>this.fmtTime(p)),current:mk(1),noinc:mk(0.545),low:mk(1.88),sum,cnt };
+  },
+  /* 热力图 24×N：逐栋逐时潜力，按当前情景倍数缩放 */
+  heatData(){
+    const base=this.SHAPE24[this.BASE_HOUR],m=this.nowMult();
+    const vals=this.rows.map(r=>this.SHAPE24.map(v=>Math.round((Number(r.potential)||0)*v/base*m)));
+    let max=1;vals.forEach(a=>a.forEach(v=>{if(v>max)max=v;}));
+    return { names:this.rows.map(r=>r.name),short:this.rows.map(r=>{const n=r.name||'';return n.length>11?n.slice(0,10)+'…':n;}),vals,max };
+  },
+  /* 当前时刻资源池：按该时刻可调量降序，附累计占比 */
+  poolData(){
+    const f=this.factorAt(this.point),m=this.nowMult();
+    const arr=this.rows.map(r=>({name:r.name,type:r.type,district:r.district,
+      v:(Number(r.potential)||0)*f*m})).sort((a,b)=>b.v-a.v);
+    const total=arr.reduce((a,x)=>a+x.v,0);
+    const top=arr.slice(0,15);
+    let acc=0;const cum=top.map(x=>{acc+=x.v;return total?+(acc/total*100).toFixed(1):0;});
+    return { names:top.map(x=>{const n=x.name||'';return n.length>11?n.slice(0,10)+'…':n;}),
+      vals:top.map(x=>Math.round(x.v)),cum,total:Math.round(total),at:this.fmtTime(this.point) };
+  },
+  play(){
+    if(this._timer){clearInterval(this._timer);this._timer=null;const b=document.getElementById('rtPlayBtn');if(b)b.textContent='▶ 播放';return;}
+    const b=document.getElementById('rtPlayBtn');if(b)b.textContent='❚❚ 暂停';
+    this._timer=setInterval(()=>{
+      if(!document.getElementById('rtPoint')){clearInterval(this._timer);this._timer=null;return;}
+      this.onSlide((this.point+1)%96);
+      if(this.point===0&&this._timer){clearInterval(this._timer);this._timer=null;const pb=document.getElementById('rtPlayBtn');if(pb)pb.textContent='▶ 播放';}
+    },220);
+  },
+  onSlide(v){
+    this.point=Math.max(0,Math.min(95,+v||0));
+    const t=document.getElementById('rtTimeLabel');if(t)t.textContent=this.fmtTime(this.point);
+    this.updateCharts(true);
+  },
+  onMode(v){
+    this.mode=v;this.updateCharts(false);
+  },
+  updateCharts(sliderOnly){
+    if(typeof echarts==='undefined')return;
+    const c=ChartHub.insts,lab=this.fmtTime(this.point),h=this.hourOf(this.point);
+    if(c.chRtCurve){
+      c.chRtCurve.setOption({series:[{markLine:{silent:true,symbol:'none',data:[{xAxis:lab,
+        lineStyle:{color:'#06b6d4',width:1.5,type:'solid'},label:{show:true,formatter:lab,color:'#06b6d4',fontSize:10}}]}},{},{}]});
+    }
+    if(c.chRtHeat){
+      c.chRtHeat.setOption({series:[{markLine:{silent:true,symbol:'none',data:[{xAxis:String(h),
+        lineStyle:{color:'#06b6d4',width:1.5,type:'solid'},label:{show:false}}]}}]});
+      if(!sliderOnly){
+        const hd=this.heatData();
+        c.chRtHeat.setOption({series:[{data:hd.vals.flatMap((a,y)=>a.map((v,x)=>[x,y,v]))}],visualMap:{max:hd.max}});
+      }
+    }
+    if(c.chRtPool){const p=this.poolData();c.chRtPool.setOption(this.poolOption(p));}
+  },
+  curveOption(d){
+    const mk=(name,data,color,width,type)=>({name,type:'line',data,smooth:true,showSymbol:false,
+      lineStyle:{color,width,type},itemStyle:{color},z:3});
+    return {
+      color:[CHART_THEME.cyan,CHART_THEME.amber,CHART_THEME.blue],
+      tooltip:ChartHub.tooltip({trigger:'axis',axisPointer:{type:'line'},
+        formatter:ps=>{const i=ps[0].dataIndex;return '<b>'+d.labels[i]+'</b><br>'+ps.map(p=>p.marker+p.seriesName+' '+fmt(p.value,0)+' kW').join('<br>');}}),
+      legend:{show:true,top:0,right:4,textStyle:{color:CHART_THEME.text,fontSize:11},itemWidth:14,itemHeight:8},
+      grid:{left:52,right:16,top:30,bottom:28},
+      xAxis:Object.assign(ChartHub.axisCommon(),{type:'category',data:d.labels,boundaryGap:false,
+        axisLabel:{color:CHART_THEME.text,fontSize:10,interval:11}}),
+      yAxis:Object.assign(ChartHub.axisCommon(),{type:'value',name:'kW',nameTextStyle:{color:CHART_THEME.text,fontSize:10}}),
+      series:[
+        Object.assign(mk('当前配置',d.current,CHART_THEME.cyan,2,'solid'),{areaStyle:{color:'rgba(6,182,212,.08)'},
+          markLine:{silent:true,symbol:'none',data:[{xAxis:this.fmtTime(this.point),lineStyle:{color:'#06b6d4',width:1.5},label:{show:true,formatter:this.fmtTime(this.point),color:'#06b6d4',fontSize:10}}]}}),
+        mk('无激励情景',d.noinc,CHART_THEME.amber,1.5,'dashed'),
+        mk('低设定温度',d.low,CHART_THEME.blue,1.5,'dotted')
+      ]
+    };
+  },
+  heatOption(hd){
+    return {
+      tooltip:ChartHub.tooltip({formatter:p=>hd.names[p.value[1]]+' · '+String(p.value[0]).padStart(2,'0')+':00<br>可调 '+fmt(p.value[2],0)+' kW'}),
+      grid:{left:8,right:12,top:10,bottom:52,containLabel:true},
+      xAxis:Object.assign(ChartHub.axisCommon(),{type:'category',data:Array.from({length:24},(_,i)=>String(i).padStart(2,'0')),
+        splitArea:{show:false},axisLabel:{color:CHART_THEME.text,fontSize:10,interval:1}}),
+      yAxis:Object.assign(ChartHub.axisCommon(),{type:'category',data:hd.short,inverse:true,
+        axisLabel:{color:CHART_THEME.text,fontSize:9},splitArea:{show:false}}),
+      visualMap:{min:0,max:hd.max,calculable:false,orient:'horizontal',left:'center',bottom:4,
+        itemWidth:12,itemHeight:110,textStyle:{color:CHART_THEME.text,fontSize:10},
+        inRange:{color:['#0d1b2e','#16385f','#1668a8','#06b6d4','#f59e0b','#ef4444']}},
+      series:[{type:'heatmap',data:hd.vals.flatMap((a,y)=>a.map((v,x)=>[x,y,v])),
+        itemStyle:{borderColor:'rgba(11,18,32,.35)',borderWidth:0.4},
+        emphasis:{itemStyle:{borderColor:'#fff',borderWidth:1}},
+        markLine:{silent:true,symbol:'none',data:[{xAxis:String(this.hourOf(this.point)),lineStyle:{color:'#06b6d4',width:1.5},label:{show:false}}]}}]
+    };
+  },
+  poolOption(p){
+    return {
+      tooltip:ChartHub.tooltip({trigger:'axis',axisPointer:{type:'shadow'},
+        formatter:ps=>{const i=ps[0].dataIndex;return '<b>'+p.names[i]+'</b><br>可调 '+fmt(p.vals[i],0)+' kW<br>累计 '+p.cum[i]+'%';}}),
+      grid:{left:8,right:44,top:26,bottom:24,containLabel:true},
+      xAxis:[Object.assign(ChartHub.axisCommon(),{type:'value',position:'top'}),
+        Object.assign(ChartHub.axisCommon(),{type:'value',position:'bottom',min:0,max:100,
+          axisLabel:{color:CHART_THEME.amber,fontSize:10,formatter:'{value}%'},splitLine:{show:false}})],
+      yAxis:Object.assign(ChartHub.axisCommon(),{type:'category',data:p.names,inverse:true,
+        axisLabel:{color:CHART_THEME.text,fontSize:10},splitLine:{show:false}}),
+      series:[
+        {name:'当前可调',type:'bar',data:p.vals,barWidth:'62%',itemStyle:{color:CHART_THEME.blue,borderRadius:[0,3,3,0]},xAxisIndex:0},
+        {name:'累计占比',type:'line',data:p.cum,smooth:true,symbol:'circle',symbolSize:4,
+          itemStyle:{color:CHART_THEME.amber},lineStyle:{color:CHART_THEME.amber,width:1.5},xAxisIndex:1}
+      ]
+    };
+  },
+  render(){
+    if(typeof echarts==='undefined'||!this.rows.length)return;
+    const cd=this.citySeries(),hd=this.heatData(),pd=this.poolData();
+    ChartHub.init('chRtCurve',this.curveOption(cd));
+    ChartHub.init('chRtHeat',this.heatOption(hd));
+    ChartHub.init('chRtPool',this.poolOption(pd));
+    const t=document.getElementById('rtTimeLabel');if(t)t.textContent=this.fmtTime(this.point);
+    const s=document.getElementById('rtPoint');if(s)s.value=this.point;
+    const m=document.getElementById('rtMode');if(m)m.value=this.mode;
+    const sum=document.getElementById('rtSumHint');
+    if(sum)sum.textContent='当前筛选 '+cd.cnt+' 栋 · 17:00 锚点合计 '+fmt(cd.sum/1000,1)+' MW';
+  }
+};
+
 const ChartHub = {
   insts: {},
   disposeAll() {
