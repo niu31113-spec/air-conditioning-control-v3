@@ -1691,30 +1691,50 @@ const Ledger={
     </div>
 
     <div class="panel">
-      <div class="panel-header"><h3>逐时可调潜力 · 三图联动</h3><span style="font-size:12.5px;color:var(--text-muted)">静态代理口径 · 分时形态取自技术报告表4.1，非逐点实测</span></div>
+      <div class="panel-header"><h3>61 栋用户 · 可调潜力速览</h3><span style="font-size:12.5px;color:var(--text-muted)">台账实测锚定 · 分时形态取自技术报告表4.1</span></div>
       <div class="panel-body">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:rgba(42,74,127,.10);border-radius:7px">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px">
+          <div style="background:rgba(6,182,212,.08);border-radius:7px;padding:11px 13px">
+            <div style="font-size:11.5px;color:var(--text-muted)">样本用户</div>
+            <div style="font-size:23px;color:var(--accent-cyan);font-weight:600">${filtered.length}<span style="font-size:12px;color:var(--text-muted)"> 栋</span></div>
+            <div style="font-size:11px;color:var(--text-muted)">柔性 ${filtered.filter(b=>b.userType==='柔性调节').length} · 互动 ${filtered.filter(b=>b.userType==='监测互动').length}</div>
+          </div>
+          <div style="background:rgba(42,74,127,.10);border-radius:7px;padding:11px 13px">
+            <div style="font-size:11.5px;color:var(--text-muted)">基准负荷合计</div>
+            <div style="font-size:23px;font-weight:600">${fmt(filteredBaseLoad/1000,1)}<span style="font-size:12px;color:var(--text-muted)"> MW</span></div>
+            <div style="font-size:11px;color:var(--text-muted)">未调控时的运行功率</div>
+          </div>
+          <div style="background:rgba(42,74,127,.10);border-radius:7px;padding:11px 13px">
+            <div style="font-size:11.5px;color:var(--text-muted)">实测标杆合计</div>
+            <div style="font-size:23px;font-weight:600">${fmt(anchorTotal/1000,1)}<span style="font-size:12px;color:var(--text-muted)"> MW</span></div>
+            <div style="font-size:11px;color:var(--text-muted)">上调 1℃ 实测削减量</div>
+          </div>
+          <div style="background:rgba(16,185,129,.08);border-radius:7px;padding:11px 13px">
+            <div style="font-size:11.5px;color:var(--text-muted)">折后可调潜力</div>
+            <div style="font-size:23px;color:var(--success);font-weight:600">${fmt(displayKW/1000,1)}<span style="font-size:12px;color:var(--text-muted)"> MW</span></div>
+            <div style="font-size:11px;color:var(--text-muted)">占基准 ${filteredBaseLoad?Math.round(displayKW/filteredBaseLoad*1000)/10:0}%</div>
+          </div>
+        </div>
+        <div style="font-size:12px;line-height:1.7;color:var(--text-muted);padding:8px 12px;background:rgba(34,211,238,.05);border-radius:7px;margin-bottom:12px">
+          <b style="color:var(--accent-cyan)">数从哪来</b>　实测标杆 <b style="color:var(--text-primary)">${fmt(anchorTotal/1000,1)} MW</b> ＝ Σ(每栋基准负荷 × 该栋可调率 6%~80%)；折后潜力 <b style="color:var(--text-primary)">${fmt(summary.total/1000,1)} MW</b> ＝ 标杆 × 响应折减（41 栋有激励不折，20 栋无激励打 0.6~0.75）。出厂参数态默认展示实测标杆，改动参数后切到情景解算值。逐栋明细见下方表格。
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;padding:8px 12px;background:rgba(42,74,127,.10);border-radius:7px">
           <button class="btn btn-outline btn-sm" onclick="RtPotential.play()" id="rtPlayBtn">▶ 播放</button>
-          <input id="rtPoint" type="range" min="0" max="95" value="68" step="1" style="flex:1;min-width:260px" oninput="RtPotential.onSlide(this.value)">
+          <input id="rtPoint" type="range" min="0" max="95" value="68" step="1" style="flex:1;min-width:220px" oninput="RtPotential.onSlide(this.value)">
           <span id="rtTimeLabel" style="font-size:16px;color:var(--accent-cyan);font-weight:600;min-width:52px">17:00</span>
-          <select id="rtMode" class="form-input" style="width:auto" onchange="RtPotential.onMode(this.value)">
-            <option value="current">当前配置</option><option value="noinc">全部无激励</option><option value="low">低设定温度</option>
-          </select>
           <span id="rtSumHint" style="font-size:11.5px;color:var(--text-muted)"></span>
         </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">① 全市逐时可调潜力（kW） · 竖线＝当前时刻</div>
-        <div id="chRtCurve" style="width:100%;height:250px"></div>
-        <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:12px;margin-top:10px">
-          <div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">② 楼宇 × 24h 可调热力图 · 颜色越暖可调越大 · 蓝线＝当前时刻</div>
-            <div id="chRtHeat" style="width:100%;height:980px"></div>
-          </div>
-          <div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">③ 当前时刻资源池排序 · 前15栋及累计占比</div>
-            <div id="chRtPool" style="width:100%;height:980px"></div>
-          </div>
-        </div>
-        <div class="calc-note" style="margin-top:8px;font-size:12px;color:var(--text-muted)">口径：P<sub>i</sub>(t)＝台账潜力 × 分时系数 f(t)（17:00＝1.0）× 情景倍数。形态来自技术报告表4.1 三个温度段均值，96 点由 24 点线性插值；<b style="color:var(--warning)">非逐点实测</b>，接入 61 栋实时负荷与气象后自动切换。静态报表数字不受本图影响。</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">61 栋合计逐时可调潜力（kW） · 默认「当前配置」，点图例可对比无激励 / 低设定温度</div>
+        <div id="chRtCurve" style="width:100%;height:270px"></div>
+        <details id="rtPoolDetail" style="margin-top:8px" ontoggle="if(this.open)RtPotential.onDetail('pool')">
+          <summary style="cursor:pointer;font-size:12.5px;color:var(--accent-cyan);padding:6px 0">▸ 当前时刻先调谁 · 前 15 栋排序与累计占比</summary>
+          <div id="chRtPool" style="width:100%;height:430px"></div>
+        </details>
+        <details id="rtHeatDetail" style="margin-top:4px" ontoggle="if(this.open)RtPotential.onDetail('heat')">
+          <summary style="cursor:pointer;font-size:12.5px;color:var(--accent-cyan);padding:6px 0">▸ 61 栋 × 24h 逐时明细热力图 · 按需展开</summary>
+          <div id="chRtHeat" style="width:100%;height:980px"></div>
+        </details>
+        <div class="calc-note" style="margin-top:8px;font-size:12px;color:var(--text-muted)">曲线口径：P(t)＝Σ每栋折后潜力 × 分时系数 f(t)，17:00＝1.0，96 点由报告表4.1 三温度段均值线性插值；<b style="color:var(--warning)">非逐点实测</b>。接入 61 栋实时负荷与气象后可切到实测口径。本模块只覆盖 61 栋台账用户，不涉及区县外推。</div>
       </div>
     </div>
 
@@ -3269,7 +3289,7 @@ const RtPotential = {
   factorAt(p){ const s=this._s96||(this._s96=this.shape96());return s[p]/s[this.BASE_HOUR*4]; },
   nowMult(){ return (this.MODES[this.mode]||this.MODES.current).mult; },
   hourOf(p){ return Math.floor(p/4); },
-  /* 全市 96 点曲线：三条情景线，合计基于当前筛选后的台账潜力 */
+  /* 61 栋 96 点曲线：三条情景线，合计基于当前筛选后的台账潜力 */
   citySeries(){
     const s=this._s96||(this._s96=this.shape96()),base=s[this.BASE_HOUR*4];
     const sum=this.rows.reduce((a,r)=>a+(Number(r.potential)||0),0);
@@ -3312,6 +3332,14 @@ const RtPotential = {
   onMode(v){
     this.mode=v;this.updateCharts(false);
   },
+  /* 折叠面板展开时才初始化，避免隐藏容器尺寸为 0 导致图表空白 */
+  onDetail(k){
+    if(typeof echarts==='undefined'||!this.rows.length)return;
+    setTimeout(()=>{
+      if(k==='pool'&&document.getElementById('chRtPool'))ChartHub.init('chRtPool',this.poolOption(this.poolData()));
+      if(k==='heat'&&document.getElementById('chRtHeat'))ChartHub.init('chRtHeat',this.heatOption(this.heatData()));
+    },60);
+  },
   updateCharts(sliderOnly){
     if(typeof echarts==='undefined')return;
     const c=ChartHub.insts,lab=this.fmtTime(this.point),h=this.hourOf(this.point);
@@ -3336,7 +3364,8 @@ const RtPotential = {
       color:[CHART_THEME.cyan,CHART_THEME.amber,CHART_THEME.blue],
       tooltip:ChartHub.tooltip({trigger:'axis',axisPointer:{type:'line'},
         formatter:ps=>{const i=ps[0].dataIndex;return '<b>'+d.labels[i]+'</b><br>'+ps.map(p=>p.marker+p.seriesName+' '+fmt(p.value,0)+' kW').join('<br>');}}),
-      legend:{show:true,top:0,right:4,textStyle:{color:CHART_THEME.text,fontSize:11},itemWidth:14,itemHeight:8},
+      legend:{show:true,top:0,right:4,textStyle:{color:CHART_THEME.text,fontSize:11},itemWidth:14,itemHeight:8,
+        selected:{'当前配置':true,'无激励情景':false,'低设定温度':false}},
       grid:{left:52,right:16,top:30,bottom:28},
       xAxis:Object.assign(ChartHub.axisCommon(),{type:'category',data:d.labels,boundaryGap:false,
         axisLabel:{color:CHART_THEME.text,fontSize:10,interval:11}}),
@@ -3385,13 +3414,12 @@ const RtPotential = {
   },
   render(){
     if(typeof echarts==='undefined'||!this.rows.length)return;
-    const cd=this.citySeries(),hd=this.heatData(),pd=this.poolData();
+    const cd=this.citySeries();
     ChartHub.init('chRtCurve',this.curveOption(cd));
-    ChartHub.init('chRtHeat',this.heatOption(hd));
-    ChartHub.init('chRtPool',this.poolOption(pd));
+    if(document.getElementById('rtPoolDetail')?.open)ChartHub.init('chRtPool',this.poolOption(this.poolData()));
+    if(document.getElementById('rtHeatDetail')?.open)ChartHub.init('chRtHeat',this.heatOption(this.heatData()));
     const t=document.getElementById('rtTimeLabel');if(t)t.textContent=this.fmtTime(this.point);
     const s=document.getElementById('rtPoint');if(s)s.value=this.point;
-    const m=document.getElementById('rtMode');if(m)m.value=this.mode;
     const sum=document.getElementById('rtSumHint');
     if(sum)sum.textContent='当前筛选 '+cd.cnt+' 栋 · 17:00 锚点合计 '+fmt(cd.sum/1000,1)+' MW';
   }
