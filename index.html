@@ -356,6 +356,11 @@ const PotentialEngine={
   // 故响应修正 = max(α比值, Kp)：无激励（监测互动）户按通知式调节仍可执行标杆能力的
   // 60%（需求响应行业纯通知/自愿响应的典型达成率 50%~70% 取中，情景参数可校准）。
   PASSIVE_RATE:0.6,
+  /* 注：曾评估把「上调幅度」由线性（×Δt）改为边际递减（每多 1℃ 增 35%），更贴近
+     空调能耗的饱和曲线。但三级策略库的 F2/F3 正是用 1.5℃/2℃ 取得更大的 C(ℓ) 容量，
+     改递减会连带压低策略侧能力（实测江北区可执行量 4289 → 3582 kW），属口径变更
+     而非缺陷修复，故不启用；改为在界面标注该口径的乐观边界，并对结果按基准负荷封顶。 */
+  AMP_DECAY:null,
   HISTORY_RATE:{'党政机关':0.95,'企事业单位':0.85,'办公写字楼':0.92,'商业综合体':0.88,'商超':0.80,'酒店':0.75},
   // 冷水机组冷冻水温提升效率系数：每提升1℃，压缩机功耗下降约3%（ASHRAE标准）
   CHW_EFFICIENCY_PER_C:0.03,
@@ -470,6 +475,11 @@ const PotentialEngine={
        上调幅度通过目标设定温度进入公式，不再单独乘一遍 Δt。 */
     const targetSet=setTemp+tempOffset;
     const kInfo=this.getK(building,outdoorTemp,targetSet);
+    /* 上调幅度按「以 1℃ 标定值为基准 × Δt」线性放大。注意：这是简化口径 ——
+       三级策略库正是靠 F2/F3 的 1.5℃/2℃ 上调取得更大的 C(ℓ) 容量，
+       故此处若改成边际递减，会连带压低策略侧能力与区县可执行量，
+       属口径变更而非缺陷修复，故保持线性，仅在各页说明其偏乐观的边界。 */
+    const ampGain=Math.max(0,tempOffset);
     let potential=0;
     let detail={};
 
@@ -482,9 +492,9 @@ const PotentialEngine={
       const alphaRatio=anchorAlpha===0?1:alpha/anchorAlpha;
       const incentiveFactor=Math.max(alphaRatio,this.PASSIVE_RATE);
       const fRespBasis=incentiveFactor>alphaRatio?'被动执行达成率 Kp':'α比值';
-      potential=building.sourcePotential*tempFactor*incentiveFactor*tempOffset;
+      potential=building.sourcePotential*tempFactor*incentiveFactor*ampGain;
       detail={model:'实测标杆情景修正',formula:'ΔP = P实测 × f温 × f响 × Δt',
-        components:{实测标杆:building.sourcePotential,温度修正:tempFactor,响应修正:incentiveFactor,响应口径:fRespBasis,上调幅度:tempOffset,
+        components:{实测标杆:building.sourcePotential,温度修正:tempFactor,响应修正:incentiveFactor,响应口径:fRespBasis,上调幅度:tempOffset,幅度增益:ampGain,
           实测削减率:rt.rate,基准削减率:rt.base,取率口径:`${rt.system==='VRF'?'多联机':'水冷机'}·${rt.mode}·${rt.label}`,
           风冷回退:rt.airCooledFallback}};
     }else if(building.acType==='多联机'){
@@ -498,11 +508,11 @@ const PotentialEngine={
     }else{
       // 冷冻水温调节型（报告 3.3.1）：末端削减 + 冷冻水温效率提升
       // ΔTin = Δt·α；η 取附件6 同系统业态/设定温度/温度段标定的 K
-      const terminalReduction=P*kInfo.k*tempOffset*alpha;
-      const chwEfficiencyGain=P*this.CHW_EFFICIENCY_PER_C*tempOffset*0.5; // 0.5为实际可利用率
+      const terminalReduction=P*kInfo.k*ampGain*alpha;
+      const chwEfficiencyGain=P*this.CHW_EFFICIENCY_PER_C*ampGain*0.5; // 0.5为实际可利用率
       potential=terminalReduction+chwEfficiencyGain;
       detail={model:'冷水机组冷冻水温调节型（附件6标定）',formula:'ΔP = P × η × α × Δt + P × 3% × Δt × 0.5',
-        components:{基准负荷P:P,末端削减率:kInfo.k,响应系数α:alpha,
+        components:{基准负荷P:P,末端削减率:kInfo.k,响应系数α:alpha,上调幅度:tempOffset,幅度增益:ampGain,
           末端削减量:terminalReduction,冷冻水效率收益:chwEfficiencyGain,温度分段:kInfo.band,
           目标设定温度:targetSet,
           取率口径:`${kInfo.system==='WC'?'水冷':'多联机'}·${kInfo.band}·${kInfo.setpoint}℃·${kInfo.typeUsed}（附件6）`,
@@ -512,7 +522,15 @@ const PotentialEngine={
 
     // 安全上限单独用于风险提示；不覆盖经确认的实测潜力口径。
     const maxPotential=Number.isFinite(building.safeLimit)?building.safeLimit:P*0.30;
-    const actualPotential=Math.max(0,potential);
+    /* 物理硬约束：削减量不可能超过该楼自身的基准负荷（等于"全关"），
+       多算的部分既不真实也无法执行，直接钳到基准负荷并标记。 */
+    const rawPotential=Math.max(0,potential);
+    const actualPotential=Math.min(rawPotential,P);
+    /* 舒适区校验：设定温度 + 采用上调 是否越过该楼舒适上限 —— 这是「当前设定」
+       唯一进入计算的位置（不改潜力，只改合规判定），使调整设定温度有可见反馈。 */
+    const cm=String(building.comfort||'').match(/(\d+(?:\.\d+)?)\s*[-~—]\s*(\d+(?:\.\d+)?)/);
+    const comfortHigh=cm?parseFloat(cm[2]):null;
+    const comfortExcess=comfortHigh!=null?Math.round(Math.max(0,setTemp+tempOffset-comfortHigh)*10)/10:0;
 
     return {
       building:building.name,
@@ -525,7 +543,12 @@ const PotentialEngine={
       potential:Math.round(actualPotential*100)/100,
       potentialPct:Math.round(actualPotential/P*1000)/10,
       maxPotential:Math.round(maxPotential*100)/100,
-      capped:potential>maxPotential,
+      capped:actualPotential>maxPotential,
+      ampCapped:rawPotential>P+1e-9,
+      rawPotential:Math.round(rawPotential*100)/100,
+      ampGain:Math.round(ampGain*1000)/1000,
+      comfortHigh:comfortHigh,
+      comfortExcess:comfortExcess,
       detail:detail
     };
   },
@@ -1150,15 +1173,98 @@ const SingleExecution={
     points.push({minute:recoveryEnd+checkInterval*2,stage:'恢复稳定',load:baseline,reduction:0});
     return points.map(p=>({...p,load:Math.round(p.load*100)/100,reduction:Math.round(p.reduction*100)/100}));
   },
+  /* ===== 楼宇级安全阈值 =====
+     取值全部来自附件7「楼宇互济全局参数总控」第 2~7 行，逐项进入 execute() 判定：
+     温度偏移以「基准设定温度」为原点，含末端响应滞后的超调量；
+     室外每高于 30℃ 1℃，末端超调 0.10℃（上限 1.5℃），这是温度阈值在高温天才触发的物理原因。 */
+  safetyMeta:{
+    tempWarn:{sym:'T_warn',label:'温度预警阈值',value:2.5,def:2.5,min:1.0,max:5.0,step:0.1,unit:'℃',desc:'室内温度偏移超过此值触发温度修正，超出部分不再计入可调量'},
+    tempRollback:{sym:'T_back',label:'温度紧急回退阈值',value:3.0,def:3.0,min:2.0,max:6.0,step:0.1,unit:'℃',desc:'偏移超过此值立即回退基准温度，本轮调控取消'},
+    loadDev:{sym:'ε_load',label:'负荷偏差触发阈值',value:0.10,def:0.10,min:0.02,max:0.30,step:0.01,unit:'比例',desc:'实际削减与目标偏差超过此比例才启动逐级调令修正'},
+    chwMax:{sym:'T_chw',label:'冷冻水最高温度',value:10.0,def:10.0,min:8.0,max:14.0,step:0.5,unit:'℃',desc:'冷水机组出水温度安全上限，超出部分不作为可调量'},
+    compMax:{sym:'η_comp',label:'压缩机最高负荷率',value:0.90,def:0.90,min:0.70,max:1.00,step:0.01,unit:'比例',desc:'多联机压缩机负荷率安全上限，超出部分按比例折减可调量'},
+    envSwing:{sym:'ΔT_env',label:'环境突变温度阈值',value:3.0,def:3.0,min:1.0,max:8.0,step:0.5,unit:'℃/15min',desc:'室外温度 15 分钟波动超过此值转应急待命，不执行调控'}
+  },
+  sGet(k){const m=this.safetyMeta[k];return m?Number(m.value):0;},
+  sSet(k,v){const m=this.safetyMeta[k];if(!m)return null;const n=Number(v);if(!Number.isFinite(n))return null;m.value=Math.min(m.max,Math.max(m.min,n));return m.value;},
+  sReset(){Object.values(this.safetyMeta).forEach(m=>{m.value=m.def;});},
+  /* 末端超调：室外温度高于 30℃ 时，末端响应滞后导致实际室温额外上浮 0.1℃/℃ */
+  overshootOf(outdoorTemp){return Math.min(1.5,Math.max(0,((Number(outdoorTemp)||35)-30)*0.10));},
+  /**
+   * 安全边界校验：给定温度偏移，返回各项阈值实算值与综合折减系数
+   * @returns {{factor:number,rollback:boolean,emergency:boolean,rows:Array,realOffset:number,overshoot:number,loadRate:number,chw:number|null}}
+   */
+  safetyCheck(building,tempOffset,outdoorTemp,outdoorSwing=0,targetReduction=0){
+    const meta=this.safetyMeta, off=Math.max(0,Number(tempOffset)||0);
+    const os=this.overshootOf(outdoorTemp), real=off+os;
+    const isChiller=(building.acType||'').includes('冷水机组');
+    const isVRF=(building.acType||'').includes('多联机');
+    const loadRate=building.capacity>0?building.baseLoad/building.capacity:0;
+    const chw=isChiller?7+off*1.5:null;
+    const swing=Math.max(0,Number(outdoorSwing)||0);
+    const rows=[]; let factor=1, rollback=false, emergency=false;
+
+    /* ① 环境突变（最高优先：室外剧变时一律不执行） */
+    const sTh=this.sGet('envSwing');
+    rows.push({key:'envSwing',label:'环境突变',val:swing.toFixed(1)+' ℃/15min',limit:'≤ '+sTh+' ℃',state:swing>sTh+1e-9?'over':'ok',
+      note:swing>sTh?'室外温度剧变，转应急待命，不下发调控指令':'室外温度平稳，可正常下发'});
+    if(swing>sTh+1e-9){emergency=true;factor=0;}
+
+    /* ② 温度紧急回退 → ③ 温度预警（同一物理量，先判上限） */
+    const rTh=this.sGet('tempRollback'), wTh=this.sGet('tempWarn');
+    rows.push({key:'tempRollback',label:'温度紧急回退',val:real.toFixed(2)+' ℃',limit:'≤ '+rTh+' ℃',state:real>rTh+1e-9?'over':'ok',
+      note:real>rTh+1e-9?'已超紧急回退阈值，立即回退基准温度':(real>wTh+1e-9?'未触及回退阈值，但已进入预警区':'距回退阈值 '+Math.max(0,rTh-real).toFixed(2)+' ℃')});
+    if(real>rTh+1e-9){rollback=true;factor=0;}
+    const warnOver=real>wTh+1e-9;
+    rows.push({key:'tempWarn',label:'温度预警',val:real.toFixed(2)+' ℃（设定 '+off.toFixed(2)+' + 超调 '+os.toFixed(2)+'）',limit:'≤ '+wTh+' ℃',state:emergency||rollback?'skip':(warnOver?'warn':'ok'),
+      note:emergency||rollback?'本轮不执行，不触发温度修正':(warnOver?`超出 ${(real-wTh).toFixed(2)} ℃，温度偏移压回 ${Math.max(0,wTh-os).toFixed(2)} ℃，超出部分不计可调量`:'未触及预警阈值')});
+    if(!emergency&&!rollback&&warnOver&&off>0){
+      const capped=Math.max(0,wTh-os);
+      factor*=Math.max(0,Math.min(1,capped/off));
+    }
+
+    /* ④ 冷冻水最高温度（仅冷水机组；出水温度随末端温度偏移等比上浮 1.5 倍） */
+    if(isChiller){
+      const cTh=this.sGet('chwMax');
+      const over=chw>cTh+1e-9;
+      rows.push({key:'chwMax',label:'冷冻水出水温度',val:chw.toFixed(2)+' ℃',limit:'≤ '+cTh+' ℃',state:emergency||rollback?'skip':(over?'warn':'ok'),
+        note:emergency||rollback?'本轮不执行':(over?`超出 ${(chw-cTh).toFixed(2)} ℃，安全出水上限折算折减 ${((cTh-7)/(1.5*Math.max(off,.01))*100).toFixed(0)}%`:(cTh-chw<0.051?'恰在安全上限，无余量可再上调':`安全余量 ${(cTh-chw).toFixed(2)} ℃`))});
+      if(!emergency&&!rollback&&over&&off>0)factor*=Math.max(0,Math.min(1,(cTh-7)/(1.5*off)));
+    }else if(isVRF){
+      rows.push({key:'chwMax',label:'冷冻水出水温度',val:'不适用',limit:'—',state:'skip',note:'多联机无冷冻水环路，本项不参与'});
+    }else{
+      rows.push({key:'chwMax',label:'冷冻水出水温度',val:'不适用',limit:'—',state:'skip',note:'风冷机组无冷冻水环路，本项不参与'});
+    }
+
+    /* ⑤ 压缩机最高负荷率（仅多联机；负荷率=基准负荷/额定容量） */
+    if(isVRF){
+      const pTh=this.sGet('compMax');
+      const over=loadRate>pTh+1e-9;
+      rows.push({key:'compMax',label:'压缩机负荷率',val:(loadRate*100).toFixed(1)+' %',limit:'≤ '+(pTh*100).toFixed(0)+' %',state:emergency||rollback?'skip':(over?'warn':'ok'),
+        note:emergency||rollback?'本轮不执行':(over?`设备已接近满载，超出安全负荷率的裕度不计入可调量，折减 ${((pTh/loadRate)*100).toFixed(0)}%`:'设备有调节裕度')});
+      if(!emergency&&!rollback&&over)factor*=Math.max(0,Math.min(1,pTh/loadRate));
+    }else{
+      rows.push({key:'compMax',label:'压缩机负荷率',val:`不适用（冷机负荷率 ${(loadRate*100).toFixed(1)}%）`,limit:'—',state:'skip',
+        note:loadRate>0.9?'附件该项为多联机阈值，冷机已接近满载但按原口径不折减':'附件该项为多联机安全阈值，冷水机组不参与'});
+    }
+
+    /* ⑥ 负荷偏差触发：仅作展示，实际用于判断是否启动逐级调令 */
+    const dTh=this.sGet('loadDev');
+    rows.push({key:'loadDev',label:'负荷偏差触发',val:'执行后回填',limit:'> '+(dTh*100).toFixed(0)+' %',state:'info',
+      note:`偏差超 ${(dTh*100).toFixed(0)}% 才启动逐级调令，避免小幅缺口频繁升降级`});
+
+    return{factor:Math.max(0,Math.min(1,factor)),rollback,emergency,rows,realOffset:real,overshoot:os,loadRate,chw,tempOffset:off};
+  },
   /**
    * 执行单体调控闭环模拟
    * @param {Object} building - 楼宇对象
    * @param {number} targetReduction - 目标削减量
    * @param {number} outdoorTemp - 室外温度
    * @param {string} incentive - 激励政策
+   * @param {number} outdoorSwing - 室外温度 15 分钟波动幅度℃（环境突变判定用）
    * @returns {Object} 执行过程记录
    */
-  execute(building,targetReduction,outdoorTemp,incentive,duration=60,monitorFeedback=1,startLevel=0){
+  execute(building,targetReduction,outdoorTemp,incentive,duration=60,monitorFeedback=1,startLevel=0,outdoorSwing=0){
     /* 达标偏差 δ：直接取协同页「任务允许偏差」，让参数真正参与判定（缺省 5%） */
     const dev=(()=>{try{const v=Number(Aggregate.synergyParams['任务允许偏差'].value);return v>0?v:0.05;}catch(e){return 0.05;}})();
     const setTemp=building.setTemp??26;
@@ -1169,6 +1275,8 @@ const SingleExecution={
     duration=Math.max(checkInterval*2,Number(duration)||60);
     const executedAt=new Date().toLocaleString('zh-CN',{hour12:false});
     const phases=[];
+    /* 安全阈值校验：按本次匹配的最高温度偏移一次性算出综合折减与逐项结果 */
+    const safety=this.safetyCheck(building,match.tempOffset,outdoorTemp,outdoorSwing,targetReduction);
 
     // 阶段1：任务触发
     phases.push({phase:'任务触发',status:'done',time:'0min',
@@ -1184,10 +1292,40 @@ const SingleExecution={
         target:targetReduction,actualReduction:0,achievementRate:0,reason:'状态检查未通过，不具备调控条件',exitReason:'设备或通信状态异常'};
     }
 
+    // 环境突变阻断：室外温度 15 分钟波动超阈值时不下发任何调控指令
+    if(safety.emergency){
+      phases.push({phase:'环境校核',status:'blocked',time:'0min',
+        desc:`室外温度 15 分钟波动 ${Math.max(0,Number(outdoorSwing)||0).toFixed(1)}℃ 超阈值 ${this.sGet('envSwing')}℃，转应急待命，本轮不下发调控指令`});
+      return{building:building.name,type:building.type,acType:building.acType,success:false,phases,safety,
+        target:targetReduction,actualReduction:0,achievementRate:0,monitorFeedback:1,adjustments:[],
+        checkInterval,strategyCode:match.strategyCode,finalLevel:match.matchedLevel,initialLevel:match.matchedLevel,
+        reason:'室外温度突变，转应急待命',exitReason:'室外温度剧变转应急待命，返回剩余缺口',
+        comfortLoss:0,restricted:'室外温度突变，暂停调控',duration:Number(duration)||60,executedAt,reboundPeak:0};
+    }
+
     // 阶段3：能力判断
     const capacity=PotentialEngine.calc(building,outdoorTemp,setTemp,incentive,match.tempOffset);
     phases.push({phase:'能力判断',status:'done',time:`${checkInterval*2}min`,
       desc:`当前可调潜力 ${capacity.potential}kW（${capacity.potentialPct}%），安全上限 ${capacity.maxPotential}kW`});
+
+    // 阶段3b：安全边界校验（温度预警 / 温度紧急回退 / 冷冻水上限 / 压缩机负荷率）
+    const safetyHits=safety.rows.filter(r=>r.state==='warn'||r.state==='over');
+    phases.push({phase:'安全边界校验',status:safety.rollback?'blocked':(safetyHits.length?'warning':'done'),time:`${checkInterval*2}min`,
+      desc:safety.rollback
+        ? `室内温度偏移 ${safety.realOffset.toFixed(2)}℃ 超紧急回退阈值 ${this.sGet('tempRollback')}℃，回退基准温度，本轮撤销`
+        : (safetyHits.length
+            ? `${safetyHits.map(r=>r.label+' '+r.val+'（限 '+r.limit+'）').join('；')}；可调量按 ${Math.round(safety.factor*100)}% 计入`
+            : `温度偏移 ${safety.realOffset.toFixed(2)}℃、设备负荷率 ${(safety.loadRate*100).toFixed(0)}%、冷冻水 ${safety.chw==null?'不适用':safety.chw.toFixed(1)+'℃'}，各项均在安全边界内`)});
+
+    if(safety.rollback){
+      phases.push({phase:'指令回退',status:'blocked',time:`${checkInterval*3}min`,
+        desc:`按温度紧急回退阈值执行：恢复基准设定温度 ${setTemp}℃，撤销本轮调令，缺口由平台重新分配`});
+      return{building:building.name,type:building.type,acType:building.acType,success:false,phases,safety,
+        target:targetReduction,actualReduction:0,achievementRate:0,monitorFeedback:1,adjustments:[],
+        checkInterval,strategyCode:match.strategyCode,finalLevel:match.matchedLevel,initialLevel:match.matchedLevel,
+        reason:'室内温度超紧急回退阈值，指令已回退',exitReason:'室内温度超紧急回退阈值，回退基准温度，返回剩余缺口',
+        comfortLoss:Math.round(match.tempOffset*10)/10,restricted:'温度超紧急回退阈值',duration:Number(duration)||60,executedAt,reboundPeak:0};
+    }
 
     // 阶段4：策略匹配
     phases.push({phase:'策略匹配',status:'done',time:`${checkInterval*2}min`,
@@ -1207,21 +1345,23 @@ const SingleExecution={
     // 反馈<1 时按实际下发的初始等级能力校核，才能真实反映"监测到打折→缺口→升级"的闭环。
     const forcedLevel=startLevel>=1&&startLevel<=3&&startLevel<match.matchedLevel;
     const initialCapacity=(feedback<1||forcedLevel)?(match.allLevels.find(l=>l.level===initialLevel)?.actualAdjustable??capacityAdjustable):capacityAdjustable;
-    const initialReduction=PotentialEngine.actualReduction(building,targetReduction,initialCapacity*feedback);
+    const initialReduction=PotentialEngine.actualReduction(building,targetReduction,initialCapacity*feedback*safety.factor);
     let currentLevel=initialLevel;
     let actualReduction=initialReduction;
     let remainingGap=Math.max(0,targetReduction-actualReduction);
     const adjustments=[];
     phases.push({phase:'效果校核',status:remainingGap<=targetReduction*dev?'done':'warning',time:`${checkInterval*4}min`,
-      desc:`三级策略最大可提供量 ${Math.round(capacityAdjustable)}kW × 历史响应率 ${Math.round(responseRate*100)}%${feedback<1?` × 监测反馈 ${Math.round(feedback*100)}%`:''}，实际削减 ${Math.round(actualReduction)}kW${remainingGap>0?`，剩余缺口 ${Math.round(remainingGap)}kW`:'，达到目标'}`});
+      desc:`三级策略最大可提供量 ${Math.round(capacityAdjustable)}kW × 历史响应率 ${Math.round(responseRate*100)}%${feedback<1?` × 监测反馈 ${Math.round(feedback*100)}%`:''}${safety.factor<1?` × 安全折减 ${Math.round(safety.factor*100)}%`:''}，实际削减 ${Math.round(actualReduction)}kW${remainingGap>0?`，剩余缺口 ${Math.round(remainingGap)}kW`:'，达到目标'}`});
 
-    // 阶段6b：动态指令调整——监测发现缺口时逐级升级策略并重新下发，直到达标或触及安全上限
-    if(remainingGap>0.01&&currentLevel<3){
+    // 阶段6b：动态指令调整——缺口率超「负荷偏差触发阈值」才逐级升级，避免小幅缺口频繁升降级
+    const loadDevTh=this.sGet('loadDev');
+    const gapRateOf=g=>targetReduction>0?g/targetReduction:1;
+    if(remainingGap>0.01&&gapRateOf(remainingGap)>loadDevTh&&currentLevel<3){
       const stratForType=StrategyLibrary.STRATEGIES[building.type]||StrategyLibrary.STRATEGIES['办公写字楼'];
       for(let lv=currentLevel+1;lv<=3;lv++){
         const up=match.allLevels.find(l=>l.level===lv);
         if(!up)continue;
-        const upReduction=PotentialEngine.actualReduction(building,targetReduction,up.actualAdjustable*feedback);
+        const upReduction=PotentialEngine.actualReduction(building,targetReduction,up.actualAdjustable*feedback*safety.factor);
         if(upReduction<=actualReduction+0.01)continue;
         const fromLevel=currentLevel;
         const fromCode=currentLevel===initialLevel?match.strategyCode:adjustments[adjustments.length-1].toCode;
@@ -1251,11 +1391,23 @@ const SingleExecution={
     phases.push({phase:'分批恢复',status:'done',time:`${duration}min后`,
       desc:`重点区域优先恢复，末端先行冷源后调，每批观察 ${checkInterval}min，分 ${isVRF?3:isMixed?3:2} 批恢复`});
 
+    /* 回填负荷偏差实算值：让「负荷偏差触发阈值」在每栋楼的校验表里可见 */
+    const gapRow=safety.rows.find(r=>r.key==='loadDev');
+    if(gapRow){
+      const gr=targetReduction>0?Math.max(0,targetReduction-actualReduction)/targetReduction:0;
+      const th=this.sGet('loadDev');
+      gapRow.val=(gr*100).toFixed(1)+' %';
+      gapRow.state=gr>th+1e-9?'warn':'ok';
+      gapRow.note=gr>th+1e-9?`偏差 ${(gr*100).toFixed(1)}% 超阈值 ${(th*100).toFixed(0)}%，已按规则逐级调令修正`
+        :`偏差 ${(gr*100).toFixed(1)}% 未达阈值 ${(th*100).toFixed(0)}%，不启动调令修正`;
+    }
     const finalReduction=actualReduction;
     const timeline=this.buildTimeline(building.baseLoad,finalReduction,checkInterval,duration,isVRF,adjustments.length?checkInterval*(4+adjustments.length):null);
     const reboundPeak=Math.max(...timeline.map(p=>p.load))-building.baseLoad;
     const achievementRate=targetReduction>0?Math.round(finalReduction/targetReduction*1000)/10:0;
-    const exitReason=achievementRate>=100*(1-dev)?'目标完成，按计划退出':match.restricted?'受安全边界限制，返回剩余缺口':'可用潜力或历史响应率不足';
+    const exitReason=achievementRate>=100*(1-dev)?'目标完成，按计划退出'
+      :(safety.factor<1?'受温度/设备安全阈值限制，返回剩余缺口'
+      :match.restricted?'受安全边界限制，返回剩余缺口':'可用潜力或历史响应率不足');
     return{
       building:building.name,
       type:building.type,
@@ -1278,7 +1430,8 @@ const SingleExecution={
       reboundPeak:Math.round(reboundPeak*100)/100,
       exitReason,
       comfortLoss:Math.round(match.tempOffset*10)/10,
-      restricted:match.restricted
+      restricted:match.restricted,
+      safety
     };
   }
 };
@@ -1324,7 +1477,7 @@ const Ledger={
     return `<details class="calc-logic" id="lgParamBlock" style="margin-top:14px" ${this.paramOpen?'open':''}>
       <summary>📊 单栋模型参数依据 <span class="calc-hint">计算参数 · 分温度段实测削减率 · α 响应系数</span></summary>
       <div class="calc-body">
-        <div style="font-size:13px;font-weight:700;margin-bottom:8px">① 计算参数 <span style="font-weight:400;font-size:11.5px;color:var(--text-muted);margin-left:6px">改动后全页联动 · 筛选只改统计范围</span></div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">① 计算参数 <span style="font-weight:400;font-size:11.5px;color:var(--text-muted);margin-left:6px">改动后全页联动 · 筛选只改统计范围 · <b style="color:var(--accent-cyan)">设定温度不放大潜力（影响已含在实测标杆内），只有上调幅度放大，且结果按基准负荷封顶</b></span></div>
         <div class="form-row" style="gap:10px">
           <div class="form-group" style="margin-bottom:6px"><label>室外温度 (℃)</label><input class="form-input" type="number" id="lgOutdoor" value="${this.outdoorTemp}" onchange="Ledger.updateParams()"></div>
           <div class="form-group" style="margin-bottom:6px"><label>激励政策口径</label><select class="form-select" id="lgIncentive" onchange="Ledger.updateParams()"><option ${this.incentive==='按楼宇配置'?'selected':''}>按楼宇配置</option><option ${this.incentive==='无激励'?'selected':''}>全部无激励</option><option ${this.incentive==='有激励'?'selected':''}>全部有激励</option></select></div>
@@ -1378,26 +1531,27 @@ const Ledger={
         <div class="formula-list">
           <div class="formula-row"><span class="fcase">① 温度分段</span><span class="fexpr">band = 30-34℃ / 35-39℃ / 40℃以上　（按 T<sub>out</sub> 判段）</span></div>
           <div class="formula-row"><span class="fcase">② 目标设定</span><span class="fexpr">T<sub>in</sub> = T<sub>s</sub> + Δt　，　Δt ≤ 楼宇上调上限</span></div>
+          <div class="formula-row"><span class="fcase">②′ 幅度口径</span><span class="fexpr">ΔP 以「上调 1℃」实测标定为基准，按 Δt 线性放大　<em>（1℃ 最可靠，2℃ 为外推值、偏乐观）</em></span></div>
         </div>
 
         <div class="grp-cap">分支 A · 有实测标杆 <em>· ${DATA_PROFILE.standard().count} 栋样本楼全部适用</em></div>
         <div class="formula-list">
           <div class="formula-row"><span class="fcase">③ 温度修正</span><span class="fexpr">f<sub>温</sub> = r(band) ÷ r<sub>0</sub></span></div>
           <div class="formula-row"><span class="fcase">④ 响应修正</span><span class="fexpr">f<sub>响</sub> = max( α ÷ α<sub>0</sub> , K<sub>p</sub> )</span></div>
-          <div class="formula-row"><span class="fcase">⑤ 分支潜力</span><span class="fexpr">ΔP = P<sub>实测</sub> × f<sub>温</sub> × f<sub>响</sub> × Δt</span></div>
+          <div class="formula-row"><span class="fcase">⑤ 分支潜力</span><span class="fexpr">ΔP = min[ P<sub>实测</sub> × f<sub>温</sub> × f<sub>响</sub> × Δt , P ]</span></div>
         </div>
 
         <div class="grp-cap">分支 B · 多联机 <em>· 无实测标杆的新增楼宇</em></div>
         <div class="formula-list">
-          <div class="formula-row"><span class="fcase">⑥ 分支潜力</span><span class="fexpr">ΔP = P × α × K × ( T<sub>out</sub> − T<sub>in</sub> )</span></div>
+          <div class="formula-row"><span class="fcase">⑥ 分支潜力</span><span class="fexpr">ΔP = min[ P × α × K × ( T<sub>out</sub> − T<sub>in</sub> ) , P ]</span></div>
         </div>
 
         <div class="grp-cap">分支 C · 冷水机组 <em>· 无实测标杆的新增楼宇</em></div>
         <div class="formula-list">
-          <div class="formula-row"><span class="fcase">⑦ 分支潜力</span><span class="fexpr">ΔP = P × η × α × Δt　+　P × 3% × Δt × 0.5</span></div>
+          <div class="formula-row"><span class="fcase">⑦ 分支潜力</span><span class="fexpr">ΔP = min[ P × η × α × Δt　+　P × 3% × Δt × 0.5 , P ]</span></div>
         </div>
 
-        <div class="calc-note" style="margin-top:14px">三支<b>互斥、不叠加</b>：楼宇有实测标杆即取 A 支，否则按空调类型取 B 或 C 支。分支 C 第一项是末端削减（乘 α，依赖用户响应），第二项是冷冻水供水温度提升带来的设备侧收益（不乘 α）。结果与安全上限（P × 30% 或台账值）比较，超限只标注风险、不截断计算结果。</div>
+        <div class="calc-note" style="margin-top:14px">三支<b>互斥、不叠加</b>：楼宇有实测标杆即取 A 支，否则按空调类型取 B 或 C 支。分支 C 第一项是末端削减（乘 α，依赖用户响应），第二项是冷冻水供水温度提升带来的设备侧收益（不乘 α）。<b>封顶说明</b>：三支结果统一按 min(·, P) 钳到基准负荷——削减量不可能大于该楼自身用冷总量（等于全部关停）；与安全上限（P × 30% 或台账值）比较时仍只标注风险、不截断。<b>Δt 说明</b>：<b>设定温度 T<sub>s</sub> 本身不放大潜力</b>（其影响已含在实测标杆内），只有上调幅度 Δt 放大；Δt&gt;1 为线性外推，2℃ 结果偏乐观。</div>
 
         <div class="sym-cap">符号含义与取值区间</div>
         <table class="sym-tb">
@@ -1408,7 +1562,7 @@ const Ledger={
             <tr><td>P<sub>实测</sub></td><td>实测标杆</td><td>44～1820 kW，61 栋逐栋实测值</td></tr>
             <tr><td>band</td><td>室外温度分段</td><td>T<sub>out</sub> &lt; 35℃ → 30-34℃；35 ≤ T<sub>out</sub> &lt; 40℃ → 35-39℃；T<sub>out</sub> ≥ 40℃ → 40℃以上</td></tr>
             <tr><td>T<sub>out</sub> / T<sub>in</sub></td><td>室外温度 / 目标设定温度</td><td>T<sub>in</sub> = T<sub>s</sub> + Δt；设定温度 T<sub>s</sub> 取 22～27℃</td></tr>
-            <tr><td>Δt</td><td>温度上调幅度</td><td>0～楼宇上限（1～2℃），默认 1℃</td></tr>
+            <tr><td>Δt</td><td>温度上调幅度</td><td>0～楼宇上限（1～2℃），默认 1℃；<b>唯一放大来源</b>。设定温度 T<sub>s</sub> 本身不放大潜力（影响已含在实测标杆内）。Δt&gt;1 为线性外推，2℃ 偏乐观</td></tr>
             <tr><td>r / r<sub>0</sub></td><td>单位温升实测削减率 / 基准段值</td><td>多联机 0.1699、水冷机 0.1106（35-39℃ 段）；r<sub>0</sub> 即该基准段值</td></tr>
             <tr><td>f<sub>温</sub></td><td>温度修正因子</td><td>多联机 0.46～1.00、水冷机 0.80～1.00；基准段（35-39℃）= 1</td></tr>
             <tr><td>α / α<sub>0</sub></td><td>用户响应系数 / 锚定值</td><td>α 取 0～0.10（按业态 × 激励查表）；α<sub>0</sub> 为该业态「有激励」值</td></tr>
@@ -1480,7 +1634,7 @@ const Ledger={
         <div class="dual-values">
           <div class="dual-item" title="Σ 各楼宇已确认的实测可调量；缺少实测标杆的新增楼宇按 0 计。此为不随情景参数变化的基准锚点，与全市推算页的样本潜力同源。"><div class="stat-value">${fmt(anchorTotal/1000,1)}</div><div class="stat-label">${factoryMode?'可调潜力合计':'实测标杆合计'}</div></div>
           <div class="dual-sep" style="${factoryMode?'display:none':''}"></div>
-          <div class="dual-item" style="${factoryMode?'display:none':''}" title="按当前室外温度、激励政策与上调口径解算的可调潜力合计，随计算参数实时变化（参数在下方「单栋模型参数依据」内）。出厂参数态下取实测标杆合计，调整任一参数后切回模型解算值。"><div class="stat-value dyn" id="lgScenValue">${fmt(displayKW/1000,1)}</div><div class="stat-label">当前设定合计</div></div>
+          <div class="dual-item" style="${factoryMode?'display:none':''}" title="按当前室外温度、激励政策与「采用上调」幅度解算的情景潜力合计，随参数实时变化（参数在下方「单栋模型参数依据」内）。上调幅度按 1℃ 标定线性放大。出厂参数态下取实测标杆合计，调整任一参数后切回模型解算值。"><div class="stat-value dyn" id="lgScenValue">${fmt(displayKW/1000,1)}</div><div class="stat-label">情景潜力合计</div></div>
         </div>
         <div class="stat-change" style="color:${scenDiffColor}">${scenDiffTxt}</div></div>
       <div class="stat-card"><div class="stat-icon orange">%</div><div class="stat-value">${filteredBaseLoad?Math.round(displayKW/filteredBaseLoad*1000)/10:0}%</div><div class="stat-label">平均可调比例</div><div class="stat-change up">${factoryMode?'实测标杆':'当前情景'} ÷ 基准负荷</div></div>
@@ -1500,12 +1654,24 @@ const Ledger={
     <div class="panel">
       <div class="panel-header"><h3>楼宇库与可调潜力结果</h3><span style="font-size:12.5px;color:var(--text-muted)">${this.focusId!=null?`仅显示：${esc((BUILDINGS.find(b=>b.id===this.focusId)||{}).name||this.focusId)} · <b style="color:var(--accent-cyan);cursor:pointer" onclick="Ledger.clearFocus()">显示全部 ${BUILDINGS.length} 栋</b>`:'表头固定 · 点击行查看计算详情'}</span></div>
       <div class="panel-body" style="padding:0">
+        <div style="padding:9px 14px;font-size:12px;line-height:1.75;color:var(--text-muted);border-bottom:1px solid var(--border);background:rgba(34,211,238,.04)">
+          <b style="color:var(--accent-cyan)">📐 计算口径</b>
+          　<b>当前设定(℃)</b> 是该楼的基准工况（负荷与舒适区的起点），<b>本身不进潜力公式</b> —— 实测标杆就是在该楼原设定温度、上调 1℃ 的条件下测出来的，设定温度的影响已含在标杆里，再乘一遍等于重复计算。削减多少只由<b>「采用上调」</b>决定：以 1℃ 标定值为基准按 Δt 线性放大（1℃→1.00×、2℃→2.00×），结果按基准负荷封顶。
+          　<b>该口径在 1℃ 处最可靠</b>，2℃ 属线性外推、偏乐观，仅用于情景推演（区县分配走策略库，按参与区域比例另算）。
+          　改「当前设定」的可见作用是<b>舒适区合规校验</b>：设定温度＋采用上调越过舒适上限时，该行「风险提示」变橙并给出越界温度。
+        </div>
         <div class="data-table-wrapper">
           <table class="data-table">
             <thead><tr>
               <th>序号</th><th>楼宇名称</th><th>业态</th><th>空调类型</th><th>区县</th><th>用户类型</th>
-              <th>基准负荷(kW)</th><th>激励状态</th><th>当前设定(℃)</th><th>舒适区间(℃)</th><th>最大上调(℃)</th><th>采用上调(℃)</th>
-              <th>实测标杆(kW)</th><th>情景潜力(kW)</th><th>可调比例</th><th>风险提示</th>
+              <th>基准负荷(kW)</th><th>激励状态</th>
+              <th title="该楼实测/采集的夏季设定温度，是基准工况与舒适区校验的起点；不直接放大潜力（其影响已含在实测标杆内）">当前设定(℃)</th>
+              <th>舒适区间(℃)</th><th>最大上调(℃)</th>
+              <th title="本次情景实际采用的上调幅度，潜力的唯一放大来源：以 1℃ 标定值为基准按 Δt 线性放大">采用上调(℃)</th>
+              <th title="附件1 实测标杆，为该楼在原设定温度、上调 1℃ 条件下实测的可调量">实测标杆(kW)</th>
+              <th title="= 实测标杆 × 温度修正 × 响应修正 × 采用上调幅度，并按基准负荷封顶">情景潜力(kW)</th>
+              <th>可调比例</th>
+              <th title="两类提示：① 潜力超过台账安全上限 ② 设定温度+采用上调越过舒适区间">风险提示</th>
             </tr></thead>
             <tbody>
               ${results.map((r,i)=>{
@@ -1520,14 +1686,16 @@ const Ledger={
                   <td><span class="badge ${b.userType==='柔性调节'?'badge-green':'badge-orange'}">${b.userType}</span></td>
                   <td class="num">${fmtInt(b.baseLoad)}</td>
                   <td><select class="form-select" style="min-width:88px;padding:4px" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'incentive',this.value)"><option ${b.incentive==='有激励'?'selected':''}>有激励</option><option ${b.incentive==='无激励'?'selected':''}>无激励</option></select></td>
-                  <td><input class="form-input" style="width:70px;padding:4px${b.hasTempField?'':';border-color:var(--orange)'}" type="number" step="0.5" value="${b.setTemp}" title="${b.hasTempField?'实测值':'未采集实测值，按 '+b.setTemp+'℃ 默认值参与计算'}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'setTemp',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px${(!b.hasTempField||r.comfortExcess>0)?';border-color:var(--orange)':''}" type="number" step="0.5" value="${b.setTemp}" title="${!b.hasTempField?'未采集实测值，按 '+b.setTemp+'℃ 默认值：':(r.comfortExcess>0?'⚠ 设定 '+b.setTemp+'℃ + 采用上调 '+b.tempOffset+'℃ = '+(Math.round((b.setTemp+b.tempOffset)*10)/10)+'℃，超出舒适上限 '+r.comfortHigh+'℃：':'实测值：')}该字段只做基准工况与舒适区校验，不改变情景潜力" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'setTemp',this.value)"></td>
                   <td class="num" style="color:${b.hasComfortField?'var(--text-muted)':'var(--orange)'}">${b.hasComfortField?b.comfort:'待采集'}</td>
                   <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" value="${b.maxTempOffset}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'maxTempOffset',this.value)"></td>
-                  <td><input class="form-input" style="width:70px;padding:4px" type="number" step="0.5" min="0" max="${b.maxTempOffset}" value="${b.tempOffset}" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'tempOffset',this.value)"></td>
+                  <td><input class="form-input" style="width:70px;padding:4px${r.comfortExcess>0?';border-color:var(--orange)':''}" type="number" step="0.5" min="0" max="${b.maxTempOffset}" value="${b.tempOffset}" title="潜力的唯一放大来源：以 1℃ 实测标定为基准按 Δt 线性放大（2℃→2.00×）。1℃ 处最可靠，2℃ 为外推值、偏乐观" onclick="event.stopPropagation()" onchange="Ledger.updateBuilding(${b.id},'tempOffset',this.value)"></td>
                   <td class="num">${b.sourcePotential===undefined?'<span style="color:var(--orange)">无实测</span>':fmtInt(b.sourcePotential)}</td>
-                  <td class="num" style="font-weight:700;color:var(--accent-cyan);font-size:14px">${fmt(r.potential,1)}</td>
+                  <td class="num" style="font-weight:700;color:var(--accent-cyan);font-size:14px" title="实测标杆 ${fmt(b.sourcePotential||0,1)} kW × 温度修正 × 响应修正 × 采用上调 ${r.ampGain}℃${r.ampCapped?'（解算值已超基准负荷，按基准负荷封顶）':''}">${fmt(r.potential,1)}${r.ampCapped?'<span style="font-size:10px;color:var(--orange);margin-left:2px">封顶</span>':''}</td>
                   <td class="num">${r.potentialPct}%</td>
-                  <td title="安全上限仅作风险提示，不裁剪已确认的实测潜力口径">${r.capped?'<span class="badge badge-orange">风险提示·超上限</span>':'<span class="badge badge-green">正常</span>'}</td>
+                  <td>${r.comfortExcess>0
+                    ?`<span class="badge badge-orange" title="设定 ${b.setTemp}℃ ＋ 采用上调 ${b.tempOffset}℃ 超出舒适上限 ${r.comfortHigh}℃；合规需把设定温度降到 ${Math.round((r.comfortHigh-b.tempOffset)*10)/10}℃ 以内，或减少上调幅度">超舒适区 +${r.comfortExcess}℃</span>`
+                    :(r.capped?'<span class="badge badge-orange" title="潜力超过台账安全上限，仅提示不裁剪（实测标杆口径优先）">风险提示·超上限</span>':'<span class="badge badge-green">正常</span>')}</td>
                 </tr>`;
               }).join('')}
             </tbody>
@@ -1578,11 +1746,16 @@ const Ledger={
     const d=r.detail;
     const hasSource=b.sourcePotential!==undefined;
     const isVrf=d.model==='多联机面板控制型';
-    const formula=hasSource
-      ?`ΔP = ${b.sourcePotential} × ${fmt(d.components.温度修正,3)} × ${fmt(d.components.响应修正,3)} × ${d.components.上调幅度} = ${fmt(r.potential,2)} kW`
+    const rawOff=offsetArg==='按楼宇配置'?(b.tempOffset??1):(offsetArg??1);
+    const ampUse=Math.min(Math.max(0,rawOff),b.maxTempOffset??rawOff);
+    const ampFmt=String(ampUse);
+    const capNote=r.ampCapped?`, P ${b.baseLoad} ]`:` = ${fmt(r.potential,2)} kW`;
+    let formula=hasSource
+      ?`ΔP = ${r.ampCapped?'min[ ':''}${b.sourcePotential} × ${fmt(d.components.温度修正,3)} × ${fmt(d.components.响应修正,3)} × ${ampFmt}${capNote}`
       :isVrf
-        ?`ΔP = ${b.baseLoad} × α${fmt(d.components.响应系数α,3)} × K${fmt(d.components.K系数,3)} × ΔT${fmt(d.components.温差ΔT,1)} × ${d.components.上调幅度} = ${fmt(r.potential,2)} kW`
-        :`ΔP = ${b.baseLoad} × ${fmt(d.components.末端削减率,3)} × ${d.components.上调幅度} × α${fmt(d.components.响应系数α,3)} + ${b.baseLoad} × 3% × ${d.components.上调幅度} × 0.5 = ${fmt(r.potential,2)} kW`;
+        ?`ΔP = ${r.ampCapped?'min[ ':''}${b.baseLoad} × α${fmt(d.components.响应系数α,3)} × K${fmt(d.components.K系数,3)} × ΔT${fmt(d.components.温差ΔT,1)} × ${d.components.上调幅度}${capNote}`
+        :`ΔP = ${r.ampCapped?'min[ ':''}${b.baseLoad} × ${fmt(d.components.末端削减率,3)} × ${ampFmt} × α${fmt(d.components.响应系数α,3)} + ${b.baseLoad} × 3% × ${ampFmt} × 0.5${capNote}`;
+    if(r.ampCapped&&!formula.endsWith('kW'))formula+=` = ${fmt(r.potential,2)} kW`;
     const modal=document.createElement('div');
     modal.className='modal-overlay show';
     modal.innerHTML=`<div class="modal" style="width:720px">
@@ -1597,15 +1770,19 @@ const Ledger={
         <tr><td>温度修正</td><td>${d.components.温度修正!==undefined?fmt(d.components.温度修正,3):'—'}</td><td>以35–39℃工况为1.000</td></tr>
         <tr><td>激励状态</td><td>${effectiveIncentive}</td><td>${this.incentive==='按楼宇配置'?'楼宇独立配置':'全局情景覆盖'}</td></tr>
         <tr><td>α响应系数</td><td>${PotentialEngine.getAlpha(b.type,effectiveIncentive)}</td><td>${b.type}·${effectiveIncentive}，查表获得${hasSource&&d.components.响应口径==='被动执行达成率 Kp'?'；实测情景按被动执行达成率 0.6 修正':''}</td></tr>
-        <tr><td>温度上调幅度</td><td>${Math.min(this.tempMode==='building'?b.tempOffset:this.tempOffset,b.maxTempOffset)}℃</td><td>不超过该楼宇 ${b.maxTempOffset}℃ 上限</td></tr>
+        <tr><td>温度上调幅度</td><td>${ampUse}℃</td><td>不超过该楼宇 ${b.maxTempOffset}℃ 上限；<b>潜力的唯一放大来源</b></td></tr>
+        <tr><td>幅度系数</td><td>${r.ampGain}×</td><td>以 1℃ 实测标定为基准按 Δt 线性放大；1℃ 处最可靠，2℃ 为外推值（偏乐观）</td></tr>
+        <tr><td>当前设定温度</td><td>${b.setTemp}℃</td><td><b>不进潜力公式</b>（标杆已含该设定温度工况）；仅参与舒适区合规校验</td></tr>
+        <tr><td>舒适区校验</td><td>${r.comfortHigh==null?'待采集':(Math.round((b.setTemp+ampUse)*10)/10)+'℃ vs 上限 '+r.comfortHigh+'℃'}</td><td>${r.comfortHigh==null?'缺舒适区间，无法判定':(r.comfortExcess>0?`<b style="color:var(--orange)">⚠ 超出 ${r.comfortExcess}℃</b>，建议设定温度 ≤ ${Math.round((r.comfortHigh-ampUse)*10)/10}℃`:'✅ 合规')}</td></tr>
       </table>
       <h4 style="font-size:14px;margin:16px 0 10px;color:var(--accent-cyan)">计算过程</h4>
       <div class="formula-box">${formula}</div>
+      ${r.ampCapped?`<div class="calc-note" style="margin-top:6px">⚠ <strong>已按基准负荷封顶：</strong>按采用上调 ${ampUse}℃ 解算为 ${fmt(r.rawPotential,1)} kW，超过该楼基准负荷 ${b.baseLoad} kW。削减量不可能超过自身用冷总量（等于全部关停），超出部分不计入，显示值取 ${fmt(r.potential,1)} kW。</div>`:''}
       ${!hasSource&&!isVrf?`<div class="calc-note" style="margin-top:6px">📌 <strong>口径说明：</strong>第一项末端削减依赖用户响应意愿，乘 α；第二项冷冻水效率收益是供水温度提升带来的<strong>设备侧收益</strong>（ASHRAE 3%/℃ × 可利用率 0.5），不依赖用户意愿，故不乘 α。</div>`:''}
       <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
         <div class="stat-card"><div class="stat-icon cyan">📊</div><div class="stat-value" style="font-size:20px">${fmt(r.potential,1)}</div><div class="stat-label">可调潜力 (kW)</div></div>
         <div class="stat-card"><div class="stat-icon purple">%</div><div class="stat-value" style="font-size:20px">${r.potentialPct}%</div><div class="stat-label">占基准负荷比例</div></div>
-         <div class="stat-card"><div class="stat-icon ${r.capped?'orange':'green'}">${r.capped?'⚠️':'✅'}</div><div class="stat-value" style="font-size:20px">${r.capped?'风险提示':'正常'}</div><div class="stat-label">安全上限 ${fmt(r.maxPotential,1)} kW · 仅提示不裁剪</div></div>
+         <div class="stat-card"><div class="stat-icon ${(r.capped||r.comfortExcess>0)?'orange':'green'}">${(r.capped||r.comfortExcess>0)?'⚠️':'✅'}</div><div class="stat-value" style="font-size:20px">${r.comfortExcess>0?'超舒适区':(r.capped?'风险提示':'正常')}</div><div class="stat-label">${r.comfortExcess>0?`舒适上限 ${r.comfortHigh}℃ · 超出 ${r.comfortExcess}℃`:`安全上限 ${fmt(r.maxPotential,1)} kW · 仅提示不裁剪`}</div></div>
       </div>
       <div class="modal-actions"><button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">关闭</button></div>
     </div>`;
@@ -2759,6 +2936,67 @@ const SingleCtrl={
   execution:null,
   selectedBuildingId:null,
   assignments(){if(!Aggregate.synergyBuildings.length)Aggregate.computeSynergy();return Aggregate.synergyBuildings.filter(b=>b.final_target>0.005);},
+  /* 楼宇级安全阈值面板：6 项全部来自附件7「楼宇互济全局参数总控」，改动即时进入执行判定 */
+  safetyPanel(){
+    const meta=SingleExecution.safetyMeta;
+    const keys=Object.keys(meta);
+    return `<details class="calc-logic" style="margin-top:6px">
+      <summary>🛡 楼宇安全阈值 <span class="calc-hint">附件7 楼宇互济全局参数总控 · ${keys.length} 项 · 改动即时进入执行判定</span></summary>
+      <div class="calc-body">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px">
+          ${keys.map(k=>{const m=meta[k];return `<div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text-secondary);margin-bottom:4px;gap:8px">
+              <span style="white-space:nowrap"><b>${m.label}</b> <code style="font-size:11px;opacity:.8">${m.sym}</code></span>
+              <span style="color:var(--text-muted);font-size:11px;white-space:nowrap">${m.min}~${m.max}</span></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input class="form-input" type="number" min="${m.min}" max="${m.max}" step="${m.step}" value="${m.value}" data-safety="${k}" onchange="SingleCtrl.setSafety(this)" style="text-align:right;width:100%;max-width:168px;padding:6px 9px">
+              <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${m.unit}</span></div>
+            <div style="font-size:11px;color:var(--text-muted);line-height:1.45;margin-top:3px">${m.desc}</div></div>`;}).join('')}
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:13px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="SingleCtrl.resetSafety()">↺ 恢复附件7 默认值</button>
+          <span id="scSafetyHint" style="font-size:11.5px;color:var(--text-muted);line-height:1.6">${this.safetyHint()}</span>
+        </div>
+      </div>
+    </details>`;
+  },
+  safetyHint(){
+    const s=SingleExecution.safetyMeta;
+    return `温度 预警 ${s.tempWarn.value}℃ / 回退 ${s.tempRollback.value}℃　·　冷冻水 ≤${s.chwMax.value}℃　·　压缩机负荷率 ≤${Number(s.compMax.value).toFixed(2)}　·　负荷偏差触发 ${s.loadDev.value}　·　环境突变 ${s.envSwing.value}℃/15min`;
+  },
+  /* 安全阈值逐条校验表：成功与阻断两种场景共用 */
+  safetyTable(e){
+    if(!e||!e.safety)return '';
+    return `<div class="panel">
+      <div class="panel-header"><h3>安全阈值校验</h3><span style="font-size:12.5px;color:var(--text-muted)">附件7「楼宇互济全局参数总控」逐条校验 · 可调量综合折减 ${Math.round(e.safety.factor*100)}%</span></div>
+      <div class="panel-body">
+        <table class="mini-tb">
+          <tr><th style="width:130px">校验项</th><th style="width:216px">本栋实算值</th><th style="width:96px">阈值</th><th style="width:74px">结论</th><th>处理</th></tr>
+          ${e.safety.rows.map(r=>`<tr>
+            <td style="white-space:nowrap">${r.label}</td>
+            <td style="text-align:left">${r.val}</td>
+            <td style="text-align:left;font-size:11px">${r.limit}</td>
+            <td>${r.state==='over'?'<span class="badge badge-red">超限</span>':r.state==='warn'?'<span class="badge badge-yellow">触及</span>':r.state==='skip'?'<span class="badge" style="opacity:.6">不适用</span>':r.state==='info'?'<span class="badge badge-blue">参与</span>':'<span class="badge badge-green">通过</span>'}</td>
+            <td style="text-align:left;font-size:11px;color:var(--text-muted);line-height:1.5">${r.note}</td></tr>`).join('')}
+        </table>
+      </div>
+    </div>`;
+  },
+  setSafety(el){
+    const k=el.dataset.safety, before=SingleExecution.sGet(k);
+    const v=SingleExecution.sSet(k,el.value);
+    if(v==null){el.value=before;return;}
+    if(Number(el.value)!==v){el.value=v;showToast(`已按允许范围钳制为 ${v}`);}
+    const hint=document.getElementById('scSafetyHint');
+    if(hint)hint.textContent=this.safetyHint();
+  },
+  resetSafety(){
+    SingleExecution.sReset();
+    document.querySelectorAll('input[data-safety]').forEach(i=>{i.value=SingleExecution.sGet(i.dataset.safety);});
+    const hint=document.getElementById('scSafetyHint');
+    if(hint)hint.textContent=this.safetyHint();
+    showToast('安全阈值已恢复附件7 默认值');
+  },
   loadAssignment(id){Aggregate.openDetail(id);},
   render(targetId='agTabBody',embedded=true){
     const el=document.getElementById(targetId);
@@ -2778,6 +3016,7 @@ const SingleCtrl={
           <div class="form-group" style="min-width:280px"><label>执行楼宇</label><input class="form-input" value="${selected.name}（${selected.acType}）" readonly></div>
           <div class="form-group"><label>协同最终任务 (kW)</label><input class="form-input" type="number" id="scTarget" value="${selected?fmt(selected.final_target,2):''}" readonly></div>
           <div class="form-group"><label>室外温度 (℃)</label><input class="form-input" type="number" id="scOutdoor" value="${Number(Ledger.outdoorTemp)||35}"></div>
+          <div class="form-group"><label title="附件7 环境突变温度阈值：室外温度 15 分钟波动超过阈值时转应急待命，不下发调控指令">室外 15min 波动 (℃)</label><input class="form-input" type="number" id="scSwing" value="0" min="0" step="0.5"></div>
           <div class="form-group"><label>保持时长 (min)</label><input class="form-input" type="number" id="scDuration" value="60" min="10" step="5"></div>
           <div class="form-group"><label>用户激励状态</label><select class="form-select" id="scIncentive"><option ${selected?.incentive==='无激励'?'selected':''}>无激励</option><option ${selected?.incentive!=='无激励'?'selected':''}>有激励</option></select></div>
           <div class="form-group"><label title="模拟现场监测到的实际响应与预期的比值：100% 为符合预期；低于 100% 时若校核发现缺口，系统将自动逐级升级指令重新下发">监测反馈 (%) <span style="color:var(--text-muted);font-size:11px">·低于100%触发动态调令</span></label><input class="form-input" type="number" id="scFeedback" value="100" min="0" max="100" step="5"></div>
@@ -2785,6 +3024,7 @@ const SingleCtrl={
           <div class="form-group"><label>协同推荐策略</label><input class="form-input" value="${selected?selected.strategyLevel:'--'}" readonly></div>
           <div class="form-group" style="display:flex;align-items:flex-end"><button class="btn btn-primary" onclick="SingleCtrl.execute()">▶ 开始执行模拟</button></div>
         </div>
+        ${this.safetyPanel()}
       </div>
     </div>
 
@@ -2804,9 +3044,11 @@ const SingleCtrl={
     const feedback=feedbackEl?Math.min(100,Math.max(0,parseFloat(feedbackEl.value)||0))/100:1;
     const lvlEl=document.getElementById('scStartLevel');
     const startLevel=lvlEl?parseInt(lvlEl.value)||0:0;
+    const swingEl=document.getElementById('scSwing');
+    const swing=swingEl?Math.max(0,parseFloat(swingEl.value)||0):0;
     const b=assignment;
 
-    this.execution=SingleExecution.execute(b,target,outdoor,inc,duration,feedback,startLevel);
+    this.execution=SingleExecution.execute(b,target,outdoor,inc,duration,feedback,startLevel,swing);
     const e=this.execution;
     Aggregate.executionResults[bid]={actualReduction:e.actualReduction||0,gap:Math.max(0,target-(e.actualReduction||0)),achievementRate:e.achievementRate||0,strategyCode:e.strategyCode||'',success:e.success};
     document.getElementById('scExportBtn').disabled=false;
@@ -2859,6 +3101,7 @@ const SingleCtrl={
         </div>
       </div>
     </div>
+    ${this.safetyTable(e)}
     ${(e.adjustments&&e.adjustments.length)?`
     <div class="panel">
       <div class="panel-header"><h3>动态调整指令记录</h3><span style="font-size:12.5px;color:var(--text-muted)">监测发现缺口 → 逐级升级 → 重新下发，全程留痕</span></div>
@@ -2878,7 +3121,12 @@ const SingleCtrl={
         </tbody></table></div>
       </div>
     </div>`:`
-    <div class="info-box warning"><strong>执行未开始：</strong>${e.reason}</div>`}
+    <div class="info-box warning"><strong>本轮未执行：</strong>${esc(e.exitReason||e.reason||'未执行')}</div>
+    ${this.safetyTable(e)}
+    ${(e.phases&&e.phases.length)?`<div class="panel">
+      <div class="panel-header"><h3>执行闭环流程</h3><span style="font-size:12.5px;color:var(--text-muted)">停在「${esc(e.phases[e.phases.length-1].phase)}」，逐条留痕</span></div>
+      <div class="panel-body">${e.phases.map((p,i)=>`<div class="flow-step"><div class="step-num ${p.status==='done'?'done':p.status==='active'?'active':''}">${i+1}</div><div class="step-content"><div class="step-title">${p.phase} <span style="font-size:12.5px;color:var(--text-muted);margin-left:8px">${p.time}</span></div><div class="step-desc">${p.desc}</div></div><div>${p.status==='blocked'?'<span class="badge badge-red">阻断</span>':p.status==='done'?'<span class="badge badge-green">完成</span>':'<span class="badge badge-blue">待执行</span>'}</div></div>`).join('')}</div>
+    </div>`:''}`}
     `;
     if(e.success) ChartBuilders.singleTimeline('chSingle', e.timeline);
     showToast(e.success?'单体执行记录已生成':'执行被阻断');
@@ -4695,6 +4943,7 @@ const SystemReset={
     SubsidySensitivity.rate=S.subsidyRate;
     if(!full){try{localStorage.setItem(SubsidySensitivity.key,String(S.subsidyRate))}catch(e){}}
     SampleBaseline.auto=true;SampleBaseline.selectedSource='custom';SampleBaseline.expanded=false;
+    SingleExecution.sReset();
     Aggregate.sourceMode='ledger';
     /* 完整复原已清空存储键，不再写回；仅参数复原需把出厂默认值持久化 */
     if(!full){
